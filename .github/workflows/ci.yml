@@ -43,6 +43,7 @@ jobs:
             curl \
             file \
             libayatana-appindicator3-dev \
+            libasound2-dev \
             libssl-dev \
             libwebkit2gtk-4.1-dev \
             libxdo-dev \
@@ -119,6 +120,7 @@ jobs:
             curl \
             file \
             libayatana-appindicator3-dev \
+            libasound2-dev \
             libssl-dev \
             libwebkit2gtk-4.1-dev \
             libxdo-dev \
