@@ -482,3 +482,36 @@ input:focus-visible {
     transform: rotate(360deg);
   }
 }
+
+/* Streaming tokens reveal progressively as their text enters the display buffer. */
+.smooth-text-container {
+  display: inline;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.subtitle-token {
+  display: inline-block;
+  white-space: pre-wrap;
+}
+
+.subtitle-token-new {
+  animation: subtitle-arrive 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes subtitle-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(0.12em);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .subtitle-token-new {
+    animation: none;
+  }
+}

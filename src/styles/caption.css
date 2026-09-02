@@ -91,12 +91,59 @@
   font-size: 11px;
 }
 
+.caption-feed {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 16px;
+  min-height: calc(100vh - 44px);
+  mask-image: linear-gradient(to bottom, transparent 0px, black 32px, black 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0px, black 32px, black 100%);
+}
+
+.caption-line-layout {
+  position: relative;
+}
+
 .caption-line {
   position: relative;
   z-index: 1;
-  margin: 0 0 6px;
+  margin: 0;
   text-align: center;
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+  transition:
+    transform 0.45s cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 0.45s cubic-bezier(0.16, 1, 0.3, 1),
+    filter 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-origin: center bottom;
+}
+
+/* Active / latest line */
+.caption-line[data-depth="0"] {
+  opacity: 1;
+  transform: scale(1) translateY(0);
+  filter: blur(0);
+}
+
+/* 1 turn ago */
+.caption-line[data-depth="1"] {
+  opacity: 0.38;
+  transform: scale(0.93) translateY(-4px);
+  filter: blur(0.7px);
+}
+
+/* 2 turns ago */
+.caption-line[data-depth="2"] {
+  opacity: 0.14;
+  transform: scale(0.86) translateY(-8px);
+  filter: blur(1.6px);
+}
+
+/* 3 or more turns ago */
+.caption-line[data-depth="3"] {
+  opacity: 0.04;
+  transform: scale(0.8) translateY(-12px);
+  filter: blur(2.5px);
 }
 
 .caption-line p {
@@ -104,21 +151,22 @@
 }
 
 .caption-translation {
-  font-size: var(--caption-font-size);
-  font-weight: 600;
+  font-size: calc(var(--caption-font-size) * 0.92);
+  font-weight: 500;
   line-height: 1.35;
   letter-spacing: -0.01em;
 }
 
 .caption-source {
-  margin-top: 3px !important;
-  color: rgba(255, 255, 255, 0.75);
-  font-size: calc(var(--caption-font-size) * 0.46);
+  margin-top: 4px !important;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: calc(var(--caption-font-size) * 0.68);
+  font-weight: 450;
   line-height: 1.35;
 }
 
-.caption-line.partial {
-  opacity: 0.8;
+.caption-pending-text {
+  opacity: 0.6;
 }
 
 .caption-empty {
@@ -163,4 +211,11 @@
 :root[data-theme="light"] .caption-close-button:hover {
   color: var(--text);
   background: rgba(15, 23, 42, 0.12);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .caption-line {
+    animation: none;
+    transition: none;
+  }
 }

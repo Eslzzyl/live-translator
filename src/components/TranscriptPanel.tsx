@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   ArrowDown,
   Check,
   Copy,
   Download,
-  FileText,
   Languages,
   PanelTop,
   Search,
@@ -12,7 +11,9 @@ import {
   X,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { isReducedMotion, playLineEntrance } from "../lib/lineEntrance";
 import { filterTranscript } from "../lib/transcript";
+import { SmoothText } from "./SmoothText";
 import type { AudioSource, SessionStatus, TranscriptEntry } from "../types";
 
 const AUDIO_SOURCE_KEY = {
@@ -20,6 +21,99 @@ const AUDIO_SOURCE_KEY = {
   microphone: "audioSources.microphone",
   mixed: "audioSources.mixed",
 } as const satisfies Record<AudioSource, string>;
+
+type CopyType = "trans" | "both";
+
+const TranscriptRow = memo(function TranscriptRow({
+  entry,
+  showOriginal,
+  isTranslationCopied,
+  isBothCopied,
+  onCopy,
+  pendingText,
+  liveText,
+  copyTranslationText,
+  copyBothText,
+  copiedText,
+}: {
+  entry: TranscriptEntry;
+  showOriginal: boolean;
+  isTranslationCopied: boolean;
+  isBothCopied: boolean;
+  onCopy: (entry: TranscriptEntry, type: CopyType) => Promise<void>;
+  pendingText: string;
+  liveText: string;
+  copyTranslationText: string;
+  copyBothText: string;
+  copiedText: string;
+}) {
+  const rowRef = useRef<HTMLElement>(null);
+
+  useLayoutEffect(() => {
+    if (isReducedMotion()) return;
+
+    const element = rowRef.current;
+    if (!element) return;
+
+    const animation = playLineEntrance(element);
+
+    return () => animation?.cancel();
+  }, []);
+
+  return (
+    <article ref={rowRef} className={`transcript-row ${entry.is_final ? "final" : "partial"}`}>
+      <time className="row-time">{entry.timestamp}</time>
+      <div className="transcript-content">
+        <div className="translation-line">
+          {entry.translation ? (
+            <SmoothText text={entry.translation} isFinal={entry.is_final} />
+          ) : (
+            pendingText
+          )}
+        </div>
+        {showOriginal && entry.source && (
+          <div className="source-line">
+            <SmoothText text={entry.source} isFinal={entry.is_final} />
+          </div>
+        )}
+      </div>
+
+      <div className="row-meta">
+        {!entry.is_final && <span className="live-label">{liveText}</span>}
+        <div className="row-actions">
+          <button
+            type="button"
+            className={`row-action-btn ${isTranslationCopied ? "copied" : ""}`}
+            onClick={() => void onCopy(entry, "trans")}
+            data-tooltip={isTranslationCopied ? copiedText : copyTranslationText}
+            aria-label={copyTranslationText}
+          >
+            {isTranslationCopied ? (
+              <Check size={13} className="action-success" />
+            ) : (
+              <Copy size={13} />
+            )}
+          </button>
+          {showOriginal && entry.source && (
+            <button
+              type="button"
+              className={`row-action-btn ${isBothCopied ? "copied" : ""}`}
+              onClick={() => void onCopy(entry, "both")}
+              data-tooltip={isBothCopied ? copiedText : copyBothText}
+              aria-label={copyBothText}
+            >
+              {isBothCopied ? (
+                <Check size={13} className="action-success" />
+              ) : (
+                <Languages size={13} />
+              )}
+            </button>
+          )}
+        </div>
+      </div>
+    </article>
+  );
+});
 
 export function TranscriptPanel({
   entries,
@@ -47,7 +141,7 @@ export function TranscriptPanel({
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [copiedType, setCopiedType] = useState<"trans" | "both" | null>(null);
+  const [copiedType, setCopiedType] = useState<CopyType | null>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [showScrollPill, setShowScrollPill] = useState(false);
 
@@ -84,7 +178,7 @@ export function TranscriptPanel({
     }
   };
 
-  const handleCopySingle = async (entry: TranscriptEntry, type: "trans" | "both") => {
+  const handleCopySingle = useCallback(async (entry: TranscriptEntry, type: CopyType) => {
     const text = type === "trans" ? entry.translation : `${entry.translation}\n${entry.source}`;
     await navigator.clipboard.writeText(text);
     setCopiedId(entry.id);
@@ -93,7 +187,7 @@ export function TranscriptPanel({
       setCopiedId(null);
       setCopiedType(null);
     }, 1500);
-  };
+  }, []);
 
   const isListening = session.state === "listening" || session.state === "reconnecting";
 
@@ -195,54 +289,19 @@ export function TranscriptPanel({
           ) : (
             <div className="transcript-feed">
               {filtered.map((entry) => (
-                <article
-                  className={`transcript-row ${entry.is_final ? "final" : "partial"}`}
+                <TranscriptRow
                   key={entry.id}
-                >
-                  <time className="row-time">{entry.timestamp}</time>
-                  <div className="transcript-content">
-                    <div className="translation-line">
-                      {entry.translation || t("transcript.pending")}
-                    </div>
-                    {showOriginal && entry.source && (
-                      <div className="source-line">{entry.source}</div>
-                    )}
-                  </div>
-
-                  <div className="row-meta">
-                    {!entry.is_final && <span className="live-label">{t("transcript.live")}</span>}
-                    <div className="row-actions">
-                      <button
-                        type="button"
-                        className="row-action-btn"
-                        onClick={() => void handleCopySingle(entry, "trans")}
-                        title={t("transcript.copyTranslation")}
-                        aria-label={t("transcript.copyTranslation")}
-                      >
-                        {copiedId === entry.id && copiedType === "trans" ? (
-                          <Check size={13} className="action-success" />
-                        ) : (
-                          <Copy size={13} />
-                        )}
-                      </button>
-                      {showOriginal && entry.source && (
-                        <button
-                          type="button"
-                          className="row-action-btn"
-                          onClick={() => void handleCopySingle(entry, "both")}
-                          title={t("transcript.copyBoth")}
-                          aria-label={t("transcript.copyBoth")}
-                        >
-                          {copiedId === entry.id && copiedType === "both" ? (
-                            <Check size={13} className="action-success" />
-                          ) : (
-                            <FileText size={13} />
-                          )}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </article>
+                  entry={entry}
+                  showOriginal={showOriginal}
+                  isTranslationCopied={copiedId === entry.id && copiedType === "trans"}
+                  isBothCopied={copiedId === entry.id && copiedType === "both"}
+                  onCopy={handleCopySingle}
+                  pendingText={t("transcript.pending")}
+                  liveText={t("transcript.live")}
+                  copyTranslationText={t("transcript.copyTranslation")}
+                  copyBothText={t("transcript.copyBoth")}
+                  copiedText={t("transcript.copied")}
+                />
               ))}
             </div>
           )}
