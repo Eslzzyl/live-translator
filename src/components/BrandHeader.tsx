@@ -1,6 +1,7 @@
-import { Languages, Moon, Settings, Sun } from "lucide-react";
+import { Moon, Settings, Sun } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { SessionStatus, Theme } from "../types";
+import { AppLogo } from "./AppLogo";
 
 const STATUS_KEY = {
   idle: "header.status.idle",
@@ -27,7 +28,7 @@ export function BrandHeader({
     <header className="topbar">
       <div className="brand-lockup">
         <div className="brand-mark">
-          <Languages size={18} />
+          <AppLogo size={18} />
         </div>
         <div>
           <div className="brand-name">Live Translator</div>
