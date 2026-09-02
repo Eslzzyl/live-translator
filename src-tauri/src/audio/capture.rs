@@ -290,10 +290,10 @@ fn build_input_stream(
 
 fn capture_config(
     device: &Device,
-    source: CaptureKind,
+    _source: CaptureKind,
 ) -> Result<cpal::SupportedStreamConfig, AppError> {
     #[cfg(target_os = "windows")]
-    if matches!(source, CaptureKind::System) {
+    if matches!(_source, CaptureKind::System) {
         // WASAPI loopback reads from an output endpoint. CPAL exposes the
         // output endpoint through its output configuration, then enables
         // loopback when build_input_stream is called on that device.
