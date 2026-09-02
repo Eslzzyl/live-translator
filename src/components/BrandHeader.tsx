@@ -23,7 +23,9 @@ export function BrandHeader({
   return (
     <header className="topbar">
       <div className="brand-lockup">
-        <div className="brand-mark"><Languages size={18} /></div>
+        <div className="brand-mark">
+          <Languages size={18} />
+        </div>
         <div>
           <div className="brand-name">Live Translator</div>
           <div className="brand-subtitle">实时字幕翻译</div>

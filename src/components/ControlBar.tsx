@@ -53,12 +53,19 @@ export function ControlBar({
           </div>
         </div>
       </div>
-      <button className={"primary-button session-button " + (session.state === "listening" ? "active" : "")} onClick={onToggleSession}>
-        {session.state === "connecting"
-          ? <LoaderCircle className="spin" size={17} />
-          : isRunning
-            ? <Square size={15} fill="currentColor" />
-            : <Play size={17} fill="currentColor" />}
+      <button
+        className={
+          "primary-button session-button " + (session.state === "listening" ? "active" : "")
+        }
+        onClick={onToggleSession}
+      >
+        {session.state === "connecting" ? (
+          <LoaderCircle className="spin" size={17} />
+        ) : isRunning ? (
+          <Square size={15} fill="currentColor" />
+        ) : (
+          <Play size={17} fill="currentColor" />
+        )}
         {isRunning ? "停止翻译" : "开始翻译"}
       </button>
     </section>

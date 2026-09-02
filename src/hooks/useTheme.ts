@@ -36,7 +36,9 @@ export function useTheme() {
   useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
       if (event.key === THEME_STORAGE_KEY) {
-        setPreference(event.newValue === "light" || event.newValue === "dark" ? event.newValue : "system");
+        setPreference(
+          event.newValue === "light" || event.newValue === "dark" ? event.newValue : "system",
+        );
       }
     };
 

@@ -75,7 +75,9 @@ function App() {
         session={translator.session}
         audioSource={translator.settings.audio_source}
         showOriginal={translator.settings.show_original}
-        onToggleOriginal={() => translator.updateSettings({ show_original: !translator.settings.show_original })}
+        onToggleOriginal={() =>
+          translator.updateSettings({ show_original: !translator.settings.show_original })
+        }
         onOpenCaption={() => void handleOpenCaption()}
         onClear={translator.clearEntries}
         onCopy={(entries) => void copyTranscript(entries)}
@@ -94,7 +96,9 @@ function App() {
       )}
       {overlayOpen && !isTauriRuntime && (
         <div className="browser-overlay-preview">
-          <button onClick={() => setOverlayOpen(false)} aria-label="关闭浮窗">×</button>
+          <button onClick={() => setOverlayOpen(false)} aria-label="关闭浮窗">
+            ×
+          </button>
           <strong>翻译字幕预览</strong>
           <span>桌面版中会显示独立字幕浮窗。</span>
         </div>

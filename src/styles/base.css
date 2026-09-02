@@ -63,14 +63,41 @@
   --scroll-thumb-hover: #98a6b9;
 }
 
-* { box-sizing: border-box; }
-html, body, #root { height: 100%; }
-body { margin: 0; min-width: 760px; min-height: 100vh; overflow: hidden; background: radial-gradient(circle at 82% -10%, var(--bg-glow), transparent 34%), var(--bg); }
-button, input, select { font: inherit; }
-button { color: inherit; }
-button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+* {
+  box-sizing: border-box;
+}
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  margin: 0;
+  min-width: 760px;
+  min-height: 100vh;
+  overflow: hidden;
+  background: radial-gradient(circle at 82% -10%, var(--bg-glow), transparent 34%), var(--bg);
+}
+button,
+input,
+select {
+  font: inherit;
+}
+button {
+  color: inherit;
+}
+button:focus-visible,
+select:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
-.icon-button, .secondary-button, .primary-button, .toolbar-button, .text-button {
+.icon-button,
+.secondary-button,
+.primary-button,
+.toolbar-button,
+.text-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -78,16 +105,74 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
   cursor: pointer;
   white-space: nowrap;
 }
-.icon-button { display: grid; width: 36px; height: 36px; padding: 0; border: 1px solid transparent; border-radius: 10px; background: transparent; }
-.icon-button:hover { border-color: var(--line); background: var(--surface-hover); }
-.icon-button.subtle { color: var(--muted); }
-.secondary-button { padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; color: var(--muted-strong); background: var(--surface-raised); font-size: 12px; }
-.secondary-button:hover, .toolbar-button:hover { border-color: rgba(146, 168, 255, .32); color: var(--text); background: var(--surface-hover); }
-.primary-button { padding: 10px 16px; border: 1px solid rgba(181, 195, 255, .3); border-radius: 10px; color: var(--primary-text); background: var(--accent-bright); font-weight: 700; font-size: 12px; box-shadow: 0 6px 18px rgba(146, 168, 255, .14); }
-.primary-button:hover { background: var(--accent-hover); }
-.primary-button.active { color: #ffe3e6; border-color: rgba(255, 158, 170, .28); background: rgba(156, 60, 78, .85); box-shadow: none; }
-.text-button { padding: 5px 0; border: 0; color: var(--muted); background: transparent; font-size: 11px; }
-.text-button:hover:not(:disabled) { color: var(--text); }
-.text-button:disabled { cursor: not-allowed; opacity: .35; }
-.spin { animation: spin .9s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
+.icon-button {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+}
+.icon-button:hover {
+  border-color: var(--line);
+  background: var(--surface-hover);
+}
+.icon-button.subtle {
+  color: var(--muted);
+}
+.secondary-button {
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--muted-strong);
+  background: var(--surface-raised);
+  font-size: 12px;
+}
+.secondary-button:hover,
+.toolbar-button:hover {
+  border-color: rgba(146, 168, 255, 0.32);
+  color: var(--text);
+  background: var(--surface-hover);
+}
+.primary-button {
+  padding: 10px 16px;
+  border: 1px solid rgba(181, 195, 255, 0.3);
+  border-radius: 10px;
+  color: var(--primary-text);
+  background: var(--accent-bright);
+  font-weight: 700;
+  font-size: 12px;
+  box-shadow: 0 6px 18px rgba(146, 168, 255, 0.14);
+}
+.primary-button:hover {
+  background: var(--accent-hover);
+}
+.primary-button.active {
+  color: #ffe3e6;
+  border-color: rgba(255, 158, 170, 0.28);
+  background: rgba(156, 60, 78, 0.85);
+  box-shadow: none;
+}
+.text-button {
+  padding: 5px 0;
+  border: 0;
+  color: var(--muted);
+  background: transparent;
+  font-size: 11px;
+}
+.text-button:hover:not(:disabled) {
+  color: var(--text);
+}
+.text-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

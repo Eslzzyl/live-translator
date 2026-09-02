@@ -24,10 +24,12 @@ export function CaptionWindow({
   return (
     <main
       className="caption-window"
-      style={{
-        "--caption-opacity": settings.overlay_opacity,
-        "--caption-font-size": String(settings.overlay_font_size) + "px",
-      } as CSSProperties}
+      style={
+        {
+          "--caption-opacity": settings.overlay_opacity,
+          "--caption-font-size": String(settings.overlay_font_size) + "px",
+        } as CSSProperties
+      }
     >
       <div className="caption-titlebar">
         <div className="caption-drag-region" data-tauri-drag-region>
@@ -43,15 +45,24 @@ export function CaptionWindow({
           <X size={16} />
         </button>
       </div>
-      {windowError && <p className="caption-window-error" role="alert">{windowError}</p>}
+      {windowError && (
+        <p className="caption-window-error" role="alert">
+          {windowError}
+        </p>
+      )}
       {entries.length === 0 ? (
         <p className="caption-empty">等待字幕……</p>
-      ) : entries.slice(-4).map((entry) => (
-        <article className={"caption-line " + (entry.is_final ? "final" : "partial")} key={entry.id}>
-          <p className="caption-translation">{entry.translation || "……"}</p>
-          {settings.show_original && <p className="caption-source">{entry.source}</p>}
-        </article>
-      ))}
+      ) : (
+        entries.slice(-4).map((entry) => (
+          <article
+            className={"caption-line " + (entry.is_final ? "final" : "partial")}
+            key={entry.id}
+          >
+            <p className="caption-translation">{entry.translation || "……"}</p>
+            {settings.show_original && <p className="caption-source">{entry.source}</p>}
+          </article>
+        ))
+      )}
     </main>
   );
 }

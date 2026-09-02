@@ -23,10 +23,10 @@
 
 ## 开发
 
-~~~text
+```text
 pnpm install
 pnpm tauri dev
-~~~
+```
 
 打开设置，保存 Gemini API Key，然后选择音频来源并开始翻译。
 
@@ -34,8 +34,8 @@ pnpm tauri dev
 
 ## 验证
 
-~~~text
+```text
 pnpm build
 cargo check --manifest-path src-tauri/Cargo.toml
 cargo test --manifest-path src-tauri/Cargo.toml
-~~~
+```

@@ -74,17 +74,17 @@ sequenceDiagram
 
 > **包管理器规范**：本项目统一使用 `pnpm`，禁止使用 `npm`、`yarn` 或 `npx`。
 
-| 操作 | 命令 | 说明 |
-| :--- | :--- | :--- |
-| **安装依赖** | `pnpm install` | 安装前端依赖 |
-| **本地开发** | `pnpm tauri dev` | 启动开发服务器（前端 Vite + 后端 Rust） |
-| **前端代码检查** | `pnpm oxlint` | 快速代码规范与 Lint 检查 |
-| **前端格式化** | `pnpm oxfmt` | 格式化前端与工程文件（`--check` 仅检查） |
-| **后端格式化** | `cargo fmt --manifest-path src-tauri/Cargo.toml` | 格式化 Rust 代码（`-- --check` 仅检查） |
-| **前端构建** | `pnpm build` | TypeScript 类型检查 (`tsc`) + Vite 打包 |
-| **后端语法检查** | `cargo check --manifest-path src-tauri/Cargo.toml` | 校验 Rust 代码与依赖 |
-| **后端 Clippy 检查** | `cargo clippy --manifest-path src-tauri/Cargo.toml` | Rust 代码规范与 Lint 检查（必须 0 警告） |
-| **后端测试** | `cargo test --manifest-path src-tauri/Cargo.toml` | 运行 Rust 单元测试（仅在核心/复杂逻辑变动时运行） |
+| 操作                 | 命令                                                | 说明                                              |
+| :------------------- | :-------------------------------------------------- | :------------------------------------------------ |
+| **安装依赖**         | `pnpm install`                                      | 安装前端依赖                                      |
+| **本地开发**         | `pnpm tauri dev`                                    | 启动开发服务器（前端 Vite + 后端 Rust）           |
+| **前端代码检查**     | `pnpm oxlint`                                       | 快速代码规范与 Lint 检查                          |
+| **前端格式化**       | `pnpm oxfmt`                                        | 格式化前端与工程文件（`--check` 仅检查）          |
+| **后端格式化**       | `cargo fmt --manifest-path src-tauri/Cargo.toml`    | 格式化 Rust 代码（`-- --check` 仅检查）           |
+| **前端构建**         | `pnpm build`                                        | TypeScript 类型检查 (`tsc`) + Vite 打包           |
+| **后端语法检查**     | `cargo check --manifest-path src-tauri/Cargo.toml`  | 校验 Rust 代码与依赖                              |
+| **后端 Clippy 检查** | `cargo clippy --manifest-path src-tauri/Cargo.toml` | Rust 代码规范与 Lint 检查（必须 0 警告）          |
+| **后端测试**         | `cargo test --manifest-path src-tauri/Cargo.toml`   | 运行 Rust 单元测试（仅在核心/复杂逻辑变动时运行） |
 
 ---
 
