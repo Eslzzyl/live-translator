@@ -52,6 +52,26 @@ pub enum UiLanguage {
     English,
 }
 
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ThemeMode {
+    Dark,
+    Light,
+    #[default]
+    System,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ColorTheme {
+    #[default]
+    Zinc,
+    Midnight,
+    Nord,
+    Forest,
+    Sepia,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AppSettings {
     #[serde(default)]
@@ -62,6 +82,10 @@ pub struct AppSettings {
     pub overlay_opacity: f32,
     pub overlay_font_size: u16,
     pub playback_enabled: bool,
+    #[serde(default)]
+    pub theme_mode: ThemeMode,
+    #[serde(default)]
+    pub color_theme: ColorTheme,
 }
 
 impl Default for AppSettings {
@@ -74,6 +98,8 @@ impl Default for AppSettings {
             overlay_opacity: 0.86,
             overlay_font_size: 28,
             playback_enabled: false,
+            theme_mode: ThemeMode::default(),
+            color_theme: ColorTheme::default(),
         }
     }
 }

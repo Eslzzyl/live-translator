@@ -3,7 +3,7 @@ import type { TranscriptEntry } from "../types";
 export function formatTranscript(entries: TranscriptEntry[]) {
   return entries
     .map((entry) => entry.timestamp + "\n" + entry.translation + "\n" + entry.source)
-    .join("\\n\\n");
+    .join("\n\n");
 }
 
 export function filterTranscript(entries: TranscriptEntry[], query: string) {

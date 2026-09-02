@@ -17,6 +17,7 @@ export function useTranslator(role: WindowRole) {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [entries, setEntries] = useState<TranscriptEntry[]>([]);
   const [session, setSession] = useState<SessionStatus>({ state: "idle", active: false });
+  const [audioLevel, setAudioLevel] = useState(0);
   const [apiKeyConfigured, setApiKeyConfigured] = useState(false);
   const settingsLoaded = useRef(false);
 
@@ -56,7 +57,17 @@ export function useTranslator(role: WindowRole) {
       if (role === "main") {
         events.push(
           listen<SessionStatus>("session-status", (event) => {
-            if (!disposed) setSession(event.payload);
+            if (!disposed) {
+              setSession(event.payload);
+              if (event.payload.state !== "listening") {
+                setAudioLevel(0);
+              }
+            }
+          }),
+        );
+        events.push(
+          listen<number>("audio-level", (event) => {
+            if (!disposed) setAudioLevel(event.payload);
           }),
         );
       }
@@ -146,6 +157,7 @@ export function useTranslator(role: WindowRole) {
     settings,
     session,
     entries,
+    audioLevel,
     apiKeyConfigured,
     updateSettings,
     toggleSession,

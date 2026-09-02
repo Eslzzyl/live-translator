@@ -84,10 +84,12 @@ async fn run(
         .await
         {
             Ok(SessionOutcome::Stopped) => {
+                let _ = app.emit("audio-level", 0.0f32);
                 let _ = app.emit("session-status", SessionStatus::new(SessionState::Idle));
                 return;
             }
             Err(error) => {
+                let _ = app.emit("audio-level", 0.0f32);
                 let _ = app.emit("session-status", SessionStatus::error(error, true));
                 tokio::select! {
                     _ = &mut stop_rx => {

@@ -1,4 +1,12 @@
-import { LoaderCircle, Mic, MonitorSpeaker, Play, Square } from "lucide-react";
+import {
+  ArrowRight,
+  AudioWaveform,
+  LoaderCircle,
+  Mic,
+  MonitorSpeaker,
+  Play,
+  Square,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { SelectMenu } from "./SelectMenu";
 import {
@@ -25,28 +33,39 @@ export function ControlBar({
   const audioOptions = AUDIO_SOURCE_OPTIONS.map(([value, key]) => [value, t(key)] as const);
   const languageOptions = LANGUAGE_OPTIONS.map(([value, key]) => [value, t(key)] as const);
 
+  const renderSourceIcon = () => {
+    switch (settings.audio_source) {
+      case "system":
+        return <MonitorSpeaker size={16} className="control-icon" />;
+      case "microphone":
+        return <Mic size={16} className="control-icon" />;
+      case "mixed":
+        return <AudioWaveform size={16} className="control-icon" />;
+    }
+  };
+
   return (
     <section className="control-panel">
-      <div className="control-group source-control">
-        <span className="control-label">{t("control.audioSource")}</span>
-        <div className="source-select-wrap">
-          {settings.audio_source === "system" ? <MonitorSpeaker size={17} /> : <Mic size={17} />}
-          <SelectMenu<AudioSource>
-            className="source-select"
-            value={settings.audio_source}
-            options={audioOptions}
-            onChange={(value) => onChange({ audio_source: value })}
-            ariaLabel={t("control.audioSource")}
-          />
+      <div className="control-items">
+        <div className="control-field">
+          <span className="control-label">{t("control.audioSource")}</span>
+          <div className="control-input-wrap">
+            {renderSourceIcon()}
+            <SelectMenu<AudioSource>
+              className="source-select"
+              value={settings.audio_source}
+              options={audioOptions}
+              onChange={(value) => onChange({ audio_source: value })}
+              ariaLabel={t("control.audioSource")}
+            />
+          </div>
         </div>
-      </div>
-      <div className="control-divider" />
-      <div className="language-control">
-        <span className="control-label">{t("control.language")}</span>
-        <div className="language-pair">
-          <span className="language-pill">{t("language.auto")}</span>
-          <span className="language-arrow">→</span>
-          <div className="language-select-wrap">
+
+        <div className="control-field language-field">
+          <span className="control-label">{t("control.language")}</span>
+          <div className="control-input-wrap language-flow">
+            <span className="auto-pill">{t("language.auto")}</span>
+            <ArrowRight size={13} className="flow-arrow" aria-hidden="true" />
             <SelectMenu
               className="language-select"
               value={settings.target_language}
@@ -57,20 +76,20 @@ export function ControlBar({
           </div>
         </div>
       </div>
+
       <button
-        className={
-          "primary-button session-button " + (session.state === "listening" ? "active" : "")
-        }
+        type="button"
+        className={`primary-button session-button ${session.state === "listening" ? "active" : ""}`}
         onClick={onToggleSession}
       >
         {session.state === "connecting" ? (
-          <LoaderCircle className="spin" size={17} />
+          <LoaderCircle className="spin" size={16} />
         ) : isRunning ? (
-          <Square size={15} fill="currentColor" />
+          <Square size={14} fill="currentColor" />
         ) : (
-          <Play size={17} fill="currentColor" />
+          <Play size={15} fill="currentColor" />
         )}
-        {isRunning ? t("control.stopTranslation") : t("control.startTranslation")}
+        <span>{isRunning ? t("control.stopTranslation") : t("control.startTranslation")}</span>
       </button>
     </section>
   );

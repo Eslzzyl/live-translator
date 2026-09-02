@@ -49,14 +49,18 @@ pub async fn run_once(
     emit_status(app, SessionStatus::new(SessionState::Listening));
 
     let mut accumulator = TranscriptAccumulator::new();
+    let mut last_level_emit = std::time::Instant::now();
+    let mut current_peak: f32 = 0.0;
     loop {
         tokio::select! {
             _ = &mut *stop_rx => {
                 let _ = socket.close(None).await;
+                emit_audio_level(app, 0.0);
                 return Ok(SessionOutcome::Stopped);
             }
             chunk = audio_rx.recv() => {
                 let Some(chunk) = chunk else {
+                    emit_audio_level(app, 0.0);
                     return Err(AppError::new("gemini.audio_capture_stopped"));
                 };
                 let pcm = if matches!(settings.audio_source, AudioSource::Mixed) {
@@ -66,6 +70,17 @@ pub async fn run_once(
                 };
                 if pcm.is_empty() {
                     continue;
+                }
+                let chunk_level = calculate_audio_level(&pcm);
+                current_peak = current_peak.max(chunk_level);
+
+                if last_level_emit.elapsed() >= Duration::from_millis(50) {
+                    emit_audio_level(app, current_peak);
+                    current_peak *= 0.65;
+                    if current_peak < 0.01 {
+                        current_peak = 0.0;
+                    }
+                    last_level_emit = std::time::Instant::now();
                 }
                 let message = json!({
                     "realtimeInput": {
@@ -78,20 +93,28 @@ pub async fn run_once(
                 socket
                     .send(Message::Text(message.to_string().into()))
                     .await
-                    .map_err(|error| AppError::with_detail("gemini.audio_send_failed", error.to_string()))?;
+                    .map_err(|error| {
+                        emit_audio_level(app, 0.0);
+                        AppError::with_detail("gemini.audio_send_failed", error.to_string())
+                    })?;
             }
             message = socket.next() => {
                 match message {
                     Some(Ok(Message::Close(frame))) => {
+                        emit_audio_level(app, 0.0);
                         return Err(close_error("gemini.connection_closed", frame));
                     }
-                    None => return Err(AppError::new("gemini.connection_closed")),
+                    None => {
+                        emit_audio_level(app, 0.0);
+                        return Err(AppError::new("gemini.connection_closed"));
+                    }
                     Some(Ok(message)) => {
                         if let Some(text) = message_text(&message)? {
                             handle_server_message(app, text, &mut accumulator, playback)?;
                         }
                     }
                     Some(Err(error)) => {
+                        emit_audio_level(app, 0.0);
                         return Err(AppError::with_detail("gemini.session_failed", error.to_string()));
                     }
                 }
@@ -281,6 +304,37 @@ fn emit_status(app: &AppHandle, status: SessionStatus) {
 
 fn emit_transcript(app: &AppHandle, entry: TranscriptEntry) {
     let _ = app.emit("transcript-update", entry);
+}
+
+fn emit_audio_level(app: &AppHandle, level: f32) {
+    let _ = app.emit("audio-level", level);
+}
+
+fn calculate_audio_level(pcm: &[u8]) -> f32 {
+    let (chunks, _) = pcm.as_chunks::<2>();
+    if chunks.is_empty() {
+        return 0.0;
+    }
+    let mut sum_sq = 0.0f64;
+    let mut peak = 0.0f32;
+    for chunk in chunks {
+        let val = i16::from_le_bytes(*chunk);
+        let sample = val as f64 / 32768.0;
+        sum_sq += sample * sample;
+        let abs_sample = (val as f32 / 32768.0).abs();
+        if abs_sample > peak {
+            peak = abs_sample;
+        }
+    }
+    let rms = (sum_sq / chunks.len() as f64).sqrt() as f32;
+    let combined = rms * 0.4 + peak * 0.6;
+
+    if combined < 0.002 {
+        0.0
+    } else {
+        let normalized = ((combined - 0.002) / 0.07).clamp(0.0, 1.0);
+        normalized.sqrt()
+    }
 }
 
 #[cfg(test)]

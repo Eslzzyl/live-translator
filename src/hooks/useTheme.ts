@@ -1,30 +1,25 @@
 import { useEffect, useState } from "react";
-import type { Theme } from "../types";
-
-const THEME_STORAGE_KEY = "live-translator-theme-preference";
+import type { ColorTheme, Theme, ThemeMode } from "../types";
 
 function getSystemTheme(): Theme {
   return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
 }
 
-function readPreference(): Theme | "system" {
-  try {
-    const stored = localStorage.getItem(THEME_STORAGE_KEY);
-    if (stored === "light" || stored === "dark") return stored;
-  } catch {
-    // Fall back to the operating system when storage is unavailable.
-  }
-  return "system";
-}
-
-export function useTheme() {
-  const [preference, setPreference] = useState<Theme | "system">(readPreference);
+export function useTheme(
+  themeMode: ThemeMode = "system",
+  colorTheme: ColorTheme = "zinc",
+  onUpdateThemeMode?: (mode: ThemeMode) => void,
+) {
   const [systemTheme, setSystemTheme] = useState<Theme>(getSystemTheme);
-  const theme = preference === "system" ? systemTheme : preference;
+  const theme: Theme = themeMode === "system" ? systemTheme : themeMode;
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+
+  useEffect(() => {
+    document.documentElement.dataset.colorTheme = colorTheme;
+  }, [colorTheme]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(prefers-color-scheme: light)");
@@ -33,29 +28,15 @@ export function useTheme() {
     return () => mediaQuery.removeEventListener("change", handleSystemThemeChange);
   }, []);
 
-  useEffect(() => {
-    const handleStorage = (event: StorageEvent) => {
-      if (event.key === THEME_STORAGE_KEY) {
-        setPreference(
-          event.newValue === "light" || event.newValue === "dark" ? event.newValue : "system",
-        );
-      }
-    };
-
-    window.addEventListener("storage", handleStorage);
-    return () => window.removeEventListener("storage", handleStorage);
-  }, []);
+  const toggleTheme = () => {
+    const nextMode: ThemeMode = theme === "dark" ? "light" : "dark";
+    if (onUpdateThemeMode) {
+      onUpdateThemeMode(nextMode);
+    }
+  };
 
   return {
     theme,
-    toggleTheme: () => {
-      const nextTheme = theme === "dark" ? "light" : "dark";
-      setPreference(nextTheme);
-      try {
-        localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
-      } catch {
-        // The explicit selection still applies to the current window.
-      }
-    },
+    toggleTheme,
   };
 }

@@ -9,7 +9,7 @@ import { TranscriptPanel } from "./components/TranscriptPanel";
 import { useTranslator } from "./hooks/useTranslator";
 import { useTheme } from "./hooks/useTheme";
 import { copyTranscript, exportTranscript } from "./lib/transcriptActions";
-import { closeCaptionWindow, openCaptionWindow } from "./lib/windows";
+import { openCaptionWindow } from "./lib/windows";
 import { formatAppError } from "./lib/errors";
 import { isCaptionWindow, isTauriRuntime } from "./lib/runtime";
 import "./styles/app.css";
@@ -17,8 +17,12 @@ import "./styles/app.css";
 function App() {
   const captionWindow = isCaptionWindow();
   const { i18n, t } = useTranslation();
-  const { theme, toggleTheme } = useTheme();
   const translator = useTranslator(captionWindow ? "caption" : "main");
+  const { theme, toggleTheme } = useTheme(
+    translator.settings.theme_mode,
+    translator.settings.color_theme,
+    (nextMode) => translator.updateSettings({ theme_mode: nextMode }),
+  );
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [overlayOpen, setOverlayOpen] = useState(false);
   const [windowError, setWindowError] = useState("");
@@ -42,16 +46,6 @@ function App() {
       if (opened || !isTauriRuntime) setOverlayOpen(true);
     } catch (error) {
       setWindowError(formatAppError(error, t, "errors.windowCaptionShow"));
-    }
-  }
-
-  async function handleCloseCaption() {
-    setWindowError("");
-    try {
-      await closeCaptionWindow();
-      setOverlayOpen(false);
-    } catch (error) {
-      setWindowError(formatAppError(error, t, "errors.windowCaptionClose"));
     }
   }
 
@@ -84,6 +78,7 @@ function App() {
       <TranscriptPanel
         entries={translator.entries}
         session={translator.session}
+        audioLevel={translator.audioLevel}
         audioSource={translator.settings.audio_source}
         showOriginal={translator.settings.show_original}
         onToggleOriginal={() =>
@@ -99,8 +94,6 @@ function App() {
           settings={translator.settings}
           onChange={translator.updateSettings}
           onClose={() => setSettingsOpen(false)}
-          onOpenCaption={() => void handleOpenCaption()}
-          onCloseCaption={() => void handleCloseCaption()}
           apiKeyConfigured={translator.apiKeyConfigured}
           onSaveApiKey={translator.saveApiKey}
         />
