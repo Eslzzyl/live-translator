@@ -72,7 +72,7 @@ impl AudioCapture {
         let host = cpal::default_host();
         let mut streams = Vec::new();
         let health = AudioHealth::default();
-        eprintln!(
+        log::info!(
             "[audio] capture_start source={}",
             audio_source_label(source)
         );
@@ -82,7 +82,7 @@ impl AudioCapture {
             crate::models::AudioSource::System | crate::models::AudioSource::Mixed
         ) {
             let device = find_system_device(&host)?;
-            eprintln!(
+            log::info!(
                 "[audio] device_selected source={} device={}",
                 source_label(CaptureKind::System),
                 device
@@ -102,7 +102,7 @@ impl AudioCapture {
             let device = host
                 .default_input_device()
                 .ok_or_else(|| AppError::new("audio.microphone_missing"))?;
-            eprintln!(
+            log::info!(
                 "[audio] device_selected source={} device={}",
                 source_label(CaptureKind::Microphone),
                 device
@@ -190,7 +190,7 @@ fn build_input_stream(
     let sample_format = supported.sample_format();
     let buffer_size = format!("{:?}", config.buffer_size);
     let supported_buffer_size = format!("{:?}", supported.buffer_size());
-    eprintln!(
+    log::info!(
         "[audio] stream_config source={} device={} sample_format={:?} sample_rate={} channels={} buffer_size={} supported_buffer_size={} normalization=auto",
         source_label(source),
         device,
@@ -204,7 +204,7 @@ fn build_input_stream(
     let error_callback = move |error: cpal::Error| {
         let error_kind = error.kind();
         let error_count = error_health.record_stream_error(error_kind);
-        eprintln!(
+        log::error!(
             "[audio] stream_error source={} kind={:?} count={} xrun_count={} detail={}",
             source_label(source),
             error_kind,

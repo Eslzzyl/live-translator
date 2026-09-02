@@ -77,7 +77,7 @@ async fn run(
 
     loop {
         let audio_health = capture.health();
-        eprintln!(
+        log::info!(
             "[session] run_attempt session_resumption={} context_window_compression={} resume_handle_present={}",
             session_resumption,
             context_window_compression,
@@ -109,7 +109,7 @@ async fn run(
                 return;
             }
             Ok(SessionOutcome::Reconnect) => {
-                eprintln!("[session] server_requested_reconnect");
+                log::warn!("[session] server_requested_reconnect");
                 let _ = app.emit("audio-level", 0.0f32);
                 let _ = app.emit(
                     "session-status",
@@ -117,9 +117,9 @@ async fn run(
                 );
             }
             Err(error) => {
-                eprintln!("[session] run_error code={}", error.code);
+                log::error!("[session] run_error code={}", error.code);
                 if error.code == "audio.capture_stalled" {
-                    eprintln!(
+                    log::warn!(
                         "[session] audio_capture_stalled; recreating_capture_stream detail={}",
                         error.detail.as_deref().unwrap_or("none")
                     );
@@ -127,7 +127,7 @@ async fn run(
                     capture = match AudioCapture::start(&settings.audio_source, audio_tx.clone()) {
                         Ok(capture) => capture,
                         Err(restart_error) => {
-                            eprintln!(
+                            log::error!(
                                 "[session] audio_capture_restart_failed code={}",
                                 restart_error.code
                             );
@@ -139,7 +139,7 @@ async fn run(
                 }
                 if error.code == "gemini.setup_rejected" {
                     if session_resumption {
-                        eprintln!(
+                        log::warn!(
                             "[session] setup_rejected; disabling_session_resumption_and_retrying"
                         );
                         session_resumption = false;
@@ -151,7 +151,7 @@ async fn run(
                         continue;
                     }
                     if context_window_compression {
-                        eprintln!(
+                        log::warn!(
                             "[session] setup_rejected; disabling_context_window_compression_and_retrying"
                         );
                         context_window_compression = false;
@@ -167,7 +167,7 @@ async fn run(
                 let response_stalled = error.code == "gemini.response_stalled";
                 let _ = app.emit("session-status", SessionStatus::error(error, true));
                 if response_stalled {
-                    eprintln!("[session] response_stalled; retrying_without_delay");
+                    log::warn!("[session] response_stalled; retrying_without_delay");
                 } else {
                     tokio::select! {
                         _ = &mut stop_rx => {

@@ -34,7 +34,7 @@ impl AudioPlayback {
         let channels = usize::from(config.channels);
         let queue = Arc::new(Mutex::new(VecDeque::new()));
         let callback_queue = Arc::clone(&queue);
-        let error_callback = |error| eprintln!("output audio stream error: {error}");
+        let error_callback = |error| log::error!("output audio stream error: {error}");
 
         let stream = match supported.sample_format() {
             SampleFormat::F32 => device.build_output_stream(

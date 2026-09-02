@@ -116,7 +116,7 @@ pub fn handle_run_event(app: &AppHandle, event: &tauri::RunEvent, shutdown_reque
 fn close_caption_then_main(app: &AppHandle) {
     if let Some(caption) = app.get_webview_window(CAPTION_LABEL) {
         if let Err(error) = caption.close() {
-            eprintln!("failed to close caption window during shutdown: {error}");
+            log::error!("failed to close caption window during shutdown: {error}");
             let _ = caption.destroy();
             close_main_after_caption(app);
         }
@@ -128,7 +128,7 @@ fn close_caption_then_main(app: &AppHandle) {
 fn close_main_after_caption(app: &AppHandle) {
     if let Some(main) = app.get_webview_window(MAIN_LABEL) {
         if let Err(error) = main.close() {
-            eprintln!("failed to close main window during shutdown: {error}");
+            log::error!("failed to close main window during shutdown: {error}");
             let _ = main.destroy();
             app.exit(1);
         }

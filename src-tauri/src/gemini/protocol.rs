@@ -72,7 +72,7 @@ pub async fn run_once(
         .await
         .map_err(|_| AppError::new("gemini.connection_timeout"))??;
     let (mut socket, _) = connection;
-    eprintln!(
+    log::info!(
         "[gemini] websocket_connected session_resumption={} context_window_compression={} resume_handle_present={}",
         session_resumption,
         context_window_compression,
@@ -102,7 +102,7 @@ pub async fn run_once(
         .map_err(|_| AppError::new("gemini.setup_timeout"))??;
     let discarded_chunks = discard_pending_audio(audio_rx);
     if discarded_chunks > 0 {
-        eprintln!(
+        log::info!(
             "[audio] discarded_pending_chunks count={} before_session_start",
             discarded_chunks
         );
@@ -278,7 +278,7 @@ pub async fn run_once(
                         last_server_content_at,
                     );
                     if response_stalled {
-                        eprintln!(
+                        log::warn!(
                             "[gemini] response_stalled speech_age={:?} speech_started_age={:?} server_content_age={:?} sent_audio_packets={}",
                             last_speech.elapsed(),
                             speech_started_at.map(|started| started.elapsed()),
@@ -311,7 +311,7 @@ pub async fn run_once(
                     .filter(|duration| *duration >= MAX_SEGMENT_DURATION)
                 {
                     if accumulator.has_text() {
-                        eprintln!(
+                        log::info!(
                             "[gemini] local_segment_timeout duration={:?}",
                             segment_duration,
                         );
@@ -486,7 +486,7 @@ fn handle_server_message(
         }
     }
     if value.get("goAway").is_some() {
-        eprintln!("[gemini] go_away received; reconnecting");
+        log::warn!("[gemini] go_away received; reconnecting");
         return Ok(ServerMessageOutcome::Reconnect);
     }
 
