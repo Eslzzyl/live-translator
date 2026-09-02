@@ -101,12 +101,12 @@ fn append_transcript(target: &mut String, text: &str) {
     }
     if target.is_empty() {
         target.push_str(text);
-    } else if target.ends_with(text) {
-        return;
-    } else if let Some(remainder) = text.strip_prefix(target.as_str()) {
-        target.push_str(remainder);
-    } else {
-        target.push_str(text);
+    } else if !target.ends_with(text) {
+        if let Some(remainder) = text.strip_prefix(target.as_str()) {
+            target.push_str(remainder);
+        } else {
+            target.push_str(text);
+        }
     }
 }
 

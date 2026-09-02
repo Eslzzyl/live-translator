@@ -51,11 +51,11 @@ fn system_proxy() -> Result<Option<ProxyEndpoint>, String> {
         if !proxy.enable || proxy.host.trim().is_empty() || proxy.port == 0 {
             return Ok(None);
         }
-        return Ok(Some(ProxyEndpoint {
+        Ok(Some(ProxyEndpoint {
             host: proxy.host,
             port: proxy.port,
             bypass: proxy.bypass,
-        }));
+        }))
     }
 
     #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
