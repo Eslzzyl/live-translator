@@ -1,4 +1,4 @@
-const SERVICE: &str = "com.eslzzyl.live-translator";
+const SERVICE: &str = "org.eu.eslzzyl.live-translator";
 const USERNAME: &str = "gemini-api-key";
 
 use crate::models::AppError;
