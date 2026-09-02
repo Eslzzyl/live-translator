@@ -81,6 +81,9 @@ impl AudioCapture {
             source,
             crate::models::AudioSource::System | crate::models::AudioSource::Mixed
         ) {
+            #[cfg(target_os = "macos")]
+            super::macos_permissions::ensure_system_audio_permission()?;
+
             let device = find_system_device(&host)?;
             log::info!(
                 "[audio] device_selected source={} device={}",
@@ -127,6 +130,13 @@ impl AudioCapture {
 }
 
 fn find_system_device(host: &cpal::Host) -> Result<Device, AppError> {
+    #[cfg(target_os = "macos")]
+    if let Some(device) = host.default_output_device() {
+        // Prefer the native CoreAudio output tap. CPAL provides this loopback
+        // path on macOS 14.6 and later, independent of virtual audio drivers.
+        return Ok(device);
+    }
+
     let devices = host.input_devices().map_err(|error| {
         AppError::with_detail("audio.device_enumeration_failed", error.to_string())
     })?;
@@ -150,8 +160,8 @@ fn find_system_device(host: &cpal::Host) -> Result<Device, AppError> {
 
     #[cfg(target_os = "windows")]
     if let Some(device) = host.default_output_device() {
-        // CPAL's WASAPI backend transparently uses an output device in loopback
-        // mode when it is opened as an input stream.
+        // WASAPI transparently uses an output device in loopback mode when it
+        // is opened as an input stream.
         return Ok(device);
     }
 
@@ -292,11 +302,11 @@ fn capture_config(
     device: &Device,
     _source: CaptureKind,
 ) -> Result<cpal::SupportedStreamConfig, AppError> {
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
     if matches!(_source, CaptureKind::System) {
-        // WASAPI loopback reads from an output endpoint. CPAL exposes the
-        // output endpoint through its output configuration, then enables
-        // loopback when build_input_stream is called on that device.
+        // System loopback reads from an output endpoint. CPAL exposes the
+        // output endpoint through its output configuration, then enables the
+        // platform-specific loopback path when build_input_stream is called.
         if let Ok(config) = device.default_output_config() {
             return Ok(config);
         }

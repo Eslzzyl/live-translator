@@ -148,12 +148,14 @@ const zhCN = {
     audioSystemUnavailableLinux:
       "当前系统没有可用的系统音频回录设备，请在 PipeWire/PulseAudio 中选择 monitor 输入。",
     audioSystemUnavailableMacos:
-      "当前系统没有可用的系统音频回录设备，macOS 通常需要 BlackHole 等虚拟音频设备。",
+      "macOS 系统声音回录不可用，请确认系统为 14.6 或更高版本，并在系统设置中允许 Live Translator 录制系统声音。",
     audioSystemUnavailable: "当前系统没有可用的系统音频回录设备。",
+    audioSystemPermissionRequired:
+      "macOS 尚未授予系统声音录制权限，请在“系统设置 → 隐私与安全性 → 屏幕与系统音频录制”中允许 Live Translator，然后重新开始。",
     audioSampleFormatUnsupported: "当前音频设备的采样格式暂不支持。",
     audioStreamCreateFailed: "无法创建音频流。",
     audioStreamStartFailed: "无法启动音频流。",
-    audioCaptureStalled: "音频采集似乎已停止，请检查音频设备。",
+    audioCaptureStalled: "系统声音没有产生音频数据，请允许 Live Translator 录制系统声音后重试。",
     audioConfigFailed: "无法打开音频配置。",
     audioPlaybackDeviceMissing: "找不到默认扬声器。",
     audioPlaybackConfigFailed: "无法打开扬声器配置。",
@@ -356,12 +358,15 @@ const en = {
     audioSystemUnavailableLinux:
       "No system audio loopback device is available. Select a monitor input in PipeWire or PulseAudio.",
     audioSystemUnavailableMacos:
-      "No system audio loopback device is available. macOS usually requires a virtual audio device such as BlackHole.",
+      "macOS system audio loopback is unavailable. macOS 14.6 or later is required; allow Live Translator to record system audio in System Settings.",
     audioSystemUnavailable: "No system audio loopback device is available.",
+    audioSystemPermissionRequired:
+      "macOS has not granted system audio recording permission. In System Settings → Privacy & Security → Screen & System Audio Recording, allow Live Translator and try again.",
     audioSampleFormatUnsupported: "This audio device's sample format is not supported.",
     audioStreamCreateFailed: "Could not create the audio stream.",
     audioStreamStartFailed: "Could not start the audio stream.",
-    audioCaptureStalled: "Audio capture appears to have stopped. Check the audio device.",
+    audioCaptureStalled:
+      "No system audio data was produced. Allow Live Translator to record system audio, then try again.",
     audioConfigFailed: "Could not open the audio configuration.",
     audioPlaybackDeviceMissing: "No default speaker found.",
     audioPlaybackConfigFailed: "Could not open the speaker configuration.",

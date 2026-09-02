@@ -16,6 +16,7 @@ const ERROR_TRANSLATION_KEYS = {
   "audio.system_unavailable.linux": "errors.audioSystemUnavailableLinux",
   "audio.system_unavailable.macos": "errors.audioSystemUnavailableMacos",
   "audio.system_unavailable": "errors.audioSystemUnavailable",
+  "audio.system_permission_required": "errors.audioSystemPermissionRequired",
   "audio.sample_format_unsupported": "errors.audioSampleFormatUnsupported",
   "audio.stream_create_failed": "errors.audioStreamCreateFailed",
   "audio.stream_start_failed": "errors.audioStreamStartFailed",

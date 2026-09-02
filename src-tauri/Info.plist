@@ -4,5 +4,7 @@
 <dict>
   <key>NSMicrophoneUsageDescription</key>
   <string>Live Translator 需要访问麦克风或系统回录音频，以生成实时字幕。</string>
+  <key>NSAudioCaptureUsageDescription</key>
+  <string>Live Translator 需要录制系统播放的声音，以生成实时字幕。</string>
 </dict>
 </plist>

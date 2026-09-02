@@ -30,7 +30,7 @@ pnpm tauri dev
 
 打开设置，保存 Gemini API Key，然后选择音频来源并开始翻译。
 
-系统声音采集使用 CPAL 的跨平台设备接口。Windows 优先使用 WASAPI 对当前默认输出设备进行回录，也兼容“立体声混音”等输入设备；Linux 可选择 PipeWire/PulseAudio monitor 输入；macOS 通常需要 BlackHole 等虚拟音频设备。麦克风采集使用 CPAL 的跨平台默认输入设备。
+系统声音采集使用 CPAL 的跨平台设备接口。Windows 使用 WASAPI 对当前默认输出设备进行回录，也兼容“立体声混音”等输入设备；Linux 可选择 PipeWire/PulseAudio monitor 输入；macOS 14.6 及以上版本使用 CoreAudio 对当前默认输出设备创建临时回录音频 tap，不需要 BlackHole 等虚拟音频设备，但首次使用必须允许应用录制系统声音。麦克风采集使用 CPAL 的跨平台默认输入设备。
 
 ## 验证
 
