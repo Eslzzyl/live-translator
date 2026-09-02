@@ -51,9 +51,18 @@ fn mix_samples(
 ) -> Vec<u8> {
     let mut output = Vec::with_capacity(count * 2);
     for _ in 0..count {
-        let left = system.pop_front().unwrap_or_default() as i32;
-        let right = microphone.pop_front().unwrap_or_default() as i32;
-        let mixed = ((left + right) / 2).clamp(i16::MIN as i32, i16::MAX as i32) as i16;
+        let left = system.pop_front().unwrap_or_default() as f32;
+        let right = microphone.pop_front().unwrap_or_default() as f32;
+        let sum = left + right;
+        let norm = sum / i16::MAX as f32;
+        let saturated = if norm > 0.85 {
+            0.85 + 0.14 * ((norm - 0.85) / 0.14).tanh()
+        } else if norm < -0.85 {
+            -0.85 - 0.14 * ((-norm - 0.85) / 0.14).tanh()
+        } else {
+            norm
+        };
+        let mixed = (saturated * i16::MAX as f32).clamp(i16::MIN as f32, i16::MAX as f32) as i16;
         output.extend_from_slice(&mixed.to_le_bytes());
     }
     output
@@ -86,6 +95,6 @@ mod tests {
             pcm: pcm(3_000),
         });
         assert_eq!(result.len(), 640);
-        assert_eq!(i16::from_le_bytes([result[0], result[1]]), 2_000);
+        assert_eq!(i16::from_le_bytes([result[0], result[1]]), 4_000);
     }
 }

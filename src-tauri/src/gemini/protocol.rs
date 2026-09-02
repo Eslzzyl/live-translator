@@ -618,14 +618,19 @@ fn calculate_audio_level(pcm: &[u8]) -> f32 {
         }
     }
     let rms = (sum_sq / chunks.len() as f64).sqrt() as f32;
-    let combined = rms * 0.4 + peak * 0.6;
+    let combined = rms * 0.5 + peak * 0.5;
 
-    if combined < 0.002 {
-        0.0
-    } else {
-        let normalized = ((combined - 0.002) / 0.07).clamp(0.0, 1.0);
-        normalized.sqrt()
+    // Minimum noise threshold: below -48 dBFS (~0.004) considered silent
+    if combined < 0.0035 {
+        return 0.0;
     }
+
+    // Map combined level to dBFS: range ~[-46 dBFS, -4 dBFS] -> [0.0, 1.0]
+    let db = 20.0 * combined.max(1e-4).log10();
+    let normalized = ((db + 46.0) / 42.0).clamp(0.0, 1.0);
+
+    // Subtle power curve for smooth dynamic response
+    normalized.powf(0.85)
 }
 
 fn take_audio_packet(buffer: &mut Vec<u8>, pcm: &[u8]) -> Option<Vec<u8>> {
@@ -706,5 +711,26 @@ mod tests {
             Some(now),
             None,
         ));
+    }
+
+    #[test]
+    fn calculate_audio_level_covers_perceptual_range() {
+        // Pure silence
+        let silence = [0u8; 640];
+        assert_eq!(calculate_audio_level(&silence), 0.0);
+
+        // Very faint signal below threshold
+        let faint = 50i16.to_le_bytes().repeat(320);
+        assert_eq!(calculate_audio_level(&faint), 0.0);
+
+        // Normal speech level (~2600 i16 = -22 dBFS)
+        let normal_speech = 2_600i16.to_le_bytes().repeat(320);
+        let normal_level = calculate_audio_level(&normal_speech);
+        assert!(normal_level > 0.50 && normal_level < 0.75);
+
+        // Loud signal (~16000 i16 = -6 dBFS)
+        let loud_signal = 16_000i16.to_le_bytes().repeat(320);
+        let loud_level = calculate_audio_level(&loud_signal);
+        assert!(loud_level > 0.85 && loud_level <= 1.0);
     }
 }

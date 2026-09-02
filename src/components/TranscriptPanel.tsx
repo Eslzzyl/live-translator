@@ -191,23 +191,20 @@ export function TranscriptPanel({
 
   const isListening = session.state === "listening" || session.state === "reconnecting";
 
-  // Dynamic equalizer bars based on real-time audio energy (3px..14px)
-  const h1 =
-    isListening && audioLevel > 0.01
-      ? Math.max(3, Math.min(13, Math.round(3 + audioLevel * 10)))
-      : 3;
-  const h2 =
-    isListening && audioLevel > 0.01
-      ? Math.max(3, Math.min(14, Math.round(3 + audioLevel * 11)))
-      : 3;
-  const h3 =
-    isListening && audioLevel > 0.01
-      ? Math.max(3, Math.min(13, Math.round(3 + audioLevel * 10)))
-      : 3;
-  const h4 =
-    isListening && audioLevel > 0.01
-      ? Math.max(3, Math.min(11, Math.round(3 + audioLevel * 8)))
-      : 3;
+  // Dynamic equalizer bars reflecting speech cadence and frequency contours (3px..14px)
+  const isSpeaking = isListening && audioLevel > 0.02;
+  const h1 = isSpeaking
+    ? Math.max(3, Math.min(12, Math.round(3 + Math.pow(audioLevel, 0.9) * 9)))
+    : 3;
+  const h2 = isSpeaking
+    ? Math.max(3, Math.min(14, Math.round(3 + Math.pow(audioLevel, 0.75) * 11)))
+    : 3;
+  const h3 = isSpeaking
+    ? Math.max(3, Math.min(13, Math.round(3 + Math.pow(audioLevel, 0.85) * 10)))
+    : 3;
+  const h4 = isSpeaking
+    ? Math.max(3, Math.min(11, Math.round(3 + Math.pow(audioLevel, 1.1) * 8)))
+    : 3;
 
   return (
     <section className="workspace-card">

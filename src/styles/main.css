@@ -724,7 +724,7 @@
   border-radius: 1px;
   background: var(--muted);
   transition:
-    height 0.05s ease-out,
+    height 0.08s ease-out,
     background 0.15s ease,
     box-shadow 0.15s ease;
 }

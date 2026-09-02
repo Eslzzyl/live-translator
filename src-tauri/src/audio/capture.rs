@@ -339,8 +339,8 @@ fn send_samples<T>(
         mono.push((sum / frame.len() as i32) as i16);
     }
 
-    normalizer.process(&mut mono);
-    let resampled = resample(&mono, sample_rate, 16_000);
+    let mut resampled = resample(&mono, sample_rate, 16_000);
+    normalizer.process(&mut resampled);
     let mut pcm = Vec::with_capacity(resampled.len() * 2);
     for sample in resampled {
         pcm.extend_from_slice(&sample.to_le_bytes());
@@ -373,20 +373,25 @@ impl IntoPcmSample for u16 {
 }
 
 const AGC_TARGET_RMS: f32 = 0.08;
-const AGC_NOISE_GATE_RMS: f32 = 0.002;
-const AGC_MIN_GAIN: f32 = 0.35;
-const AGC_MAX_GAIN: f32 = 8.0;
-const AGC_LIMIT: f32 = 0.95;
-const AGC_ATTACK: f32 = 0.2;
-const AGC_RELEASE: f32 = 0.05;
+const AGC_MIN_GAIN: f32 = 0.25;
+const AGC_MAX_GAIN: f32 = 24.0;
+const AGC_HOLD_SAMPLES: usize = 12_800; // ~800ms at 16kHz
+const AGC_NOISE_FLOOR_INIT: f32 = 0.0005;
+const AGC_SPEECH_ABSOLUTE_FLOOR: f32 = 0.0008;
 
 struct AutoGain {
     gain: f32,
+    hold_remaining_samples: usize,
+    noise_floor: f32,
 }
 
 impl Default for AutoGain {
     fn default() -> Self {
-        Self { gain: 1.0 }
+        Self {
+            gain: 1.0,
+            hold_remaining_samples: 0,
+            noise_floor: AGC_NOISE_FLOOR_INIT,
+        }
     }
 }
 
@@ -396,37 +401,56 @@ impl AutoGain {
             return;
         }
 
-        let (sum_squares, peak) = samples
-            .iter()
-            .fold((0.0f64, 0.0f32), |(sum, peak), sample| {
-                let normalized = *sample as f32 / i16::MAX as f32;
-                (
-                    sum + f64::from(normalized * normalized),
-                    peak.max(normalized.abs()),
-                )
-            });
+        let mut sum_squares = 0.0f64;
+        let mut peak = 0.0f32;
+        for &sample in samples.iter() {
+            let norm = sample as f32 / i16::MAX as f32;
+            sum_squares += f64::from(norm * norm);
+            let abs_norm = norm.abs();
+            if abs_norm > peak {
+                peak = abs_norm;
+            }
+        }
         let rms = (sum_squares / samples.len() as f64).sqrt() as f32;
-        let desired_gain = if rms >= AGC_NOISE_GATE_RMS {
-            (AGC_TARGET_RMS / rms).clamp(AGC_MIN_GAIN, AGC_MAX_GAIN)
-        } else {
-            1.0
-        };
-        let smoothing = if desired_gain > self.gain {
-            AGC_ATTACK
-        } else {
-            AGC_RELEASE
-        };
-        self.gain += (desired_gain - self.gain) * smoothing;
 
-        let applied_gain = if peak > 0.0 {
-            self.gain.min(AGC_LIMIT / peak)
+        // Adaptively track the background noise floor
+        if rms < self.noise_floor {
+            self.noise_floor = self.noise_floor * 0.9 + rms * 0.1;
         } else {
-            self.gain
-        };
-        for sample in samples {
-            let normalized = *sample as f32 / i16::MAX as f32;
-            let limited = (normalized * applied_gain).clamp(-AGC_LIMIT, AGC_LIMIT);
-            *sample = (limited * i16::MAX as f32) as i16;
+            self.noise_floor = (self.noise_floor * 0.9995 + rms * 0.0005).min(0.005);
+        }
+
+        let speech_threshold = (self.noise_floor * 2.2).max(AGC_SPEECH_ABSOLUTE_FLOOR);
+        let is_speech = rms >= speech_threshold;
+
+        if is_speech {
+            let desired_gain = (AGC_TARGET_RMS / rms.max(1e-4)).clamp(AGC_MIN_GAIN, AGC_MAX_GAIN);
+            let smoothing = if desired_gain < self.gain {
+                0.25 // Rapid response when signal gets too loud
+            } else {
+                0.12 // Smooth ramp-up for quiet speech
+            };
+            self.gain += (desired_gain - self.gain) * smoothing;
+            self.hold_remaining_samples = AGC_HOLD_SAMPLES;
+        } else if self.hold_remaining_samples > 0 {
+            // Hangover hold: freeze gain across brief pauses between words and syllables
+            self.hold_remaining_samples = self.hold_remaining_samples.saturating_sub(samples.len());
+        } else {
+            // Prolonged silence: slowly release gain towards neutral 1.0 without noise boost
+            self.gain += (1.0 - self.gain) * 0.02;
+        }
+
+        // Apply gain with smooth soft-knee saturation to eliminate harsh clipping
+        for sample in samples.iter_mut() {
+            let val = (*sample as f32 / i16::MAX as f32) * self.gain;
+            let saturated = if val > 0.85 {
+                0.85 + 0.14 * ((val - 0.85) / 0.14).tanh()
+            } else if val < -0.85 {
+                -0.85 - 0.14 * ((-val - 0.85) / 0.14).tanh()
+            } else {
+                val
+            };
+            *sample = (saturated * i16::MAX as f32).clamp(i16::MIN as f32, i16::MAX as f32) as i16;
         }
     }
 }
@@ -435,13 +459,54 @@ pub(crate) fn resample(input: &[i16], from_rate: u32, to_rate: u32) -> Vec<i16> 
     if input.is_empty() || from_rate == to_rate {
         return input.to_vec();
     }
+
+    let ratio = from_rate as f64 / to_rate as f64;
     let output_len = (input.len() as u64 * u64::from(to_rate) / u64::from(from_rate)) as usize;
-    (0..output_len)
-        .map(|index| {
-            let source_index = (index as u64 * u64::from(from_rate) / u64::from(to_rate)) as usize;
-            input[source_index.min(input.len() - 1)]
-        })
-        .collect()
+    if output_len == 0 {
+        return Vec::new();
+    }
+
+    let mut output = Vec::with_capacity(output_len);
+
+    if ratio >= 1.0 {
+        // Downsampling: area-averaging across fractional window [t_start, t_end]
+        // Provides natural low-pass anti-aliasing filtering and eliminates foldback distortion.
+        for i in 0..output_len {
+            let t_start = i as f64 * ratio;
+            let t_end = (i + 1) as f64 * ratio;
+            let mut sum = 0.0f64;
+
+            let idx_start = t_start.floor() as usize;
+            let idx_end = (t_end.ceil() as usize).min(input.len());
+
+            for idx in idx_start..idx_end {
+                let seg_start = (idx as f64).max(t_start);
+                let seg_end = ((idx + 1) as f64).min(t_end);
+                let weight = (seg_end - seg_start).max(0.0);
+                sum += f64::from(input[idx.min(input.len() - 1)]) * weight;
+            }
+
+            let span = (t_end - t_start).max(1e-6);
+            let avg = (sum / span).round().clamp(i16::MIN as f64, i16::MAX as f64) as i16;
+            output.push(avg);
+        }
+    } else {
+        // Upsampling: linear interpolation between adjacent samples
+        for i in 0..output_len {
+            let t = i as f64 * ratio;
+            let idx = t.floor() as usize;
+            let frac = t - idx as f64;
+
+            let s0 = f64::from(input[idx.min(input.len() - 1)]);
+            let s1 = f64::from(input[(idx + 1).min(input.len() - 1)]);
+            let sample = (s0 * (1.0 - frac) + s1 * frac)
+                .round()
+                .clamp(i16::MIN as f64, i16::MAX as f64) as i16;
+            output.push(sample);
+        }
+    }
+
+    output
 }
 
 fn source_label(source: CaptureKind) -> &'static str {
@@ -461,7 +526,7 @@ fn audio_source_label(source: &crate::models::AudioSource) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::AutoGain;
+    use super::*;
 
     #[test]
     fn auto_gain_raises_quiet_signal_without_exceeding_limit() {
@@ -491,18 +556,42 @@ mod tests {
     }
 
     #[test]
-    fn auto_gain_does_not_turn_silence_into_noise() {
+    fn auto_gain_holds_gain_during_short_speech_pause() {
         let mut normalizer = AutoGain::default();
-        for _ in 0..40 {
-            let mut quiet_signal = vec![100i16; 480];
-            normalizer.process(&mut quiet_signal);
+        for _ in 0..20 {
+            let mut speech = vec![300i16; 480];
+            normalizer.process(&mut speech);
         }
-        let gain_after_signal = normalizer.gain;
+        let gain_after_speech = normalizer.gain;
+        assert!(gain_after_speech > 1.5);
 
+        // Pause for 480 samples (~30ms, well within 800ms hold time)
         let mut silence = vec![0i16; 480];
         normalizer.process(&mut silence);
 
-        assert!(silence.iter().all(|sample| *sample == 0));
-        assert!(normalizer.gain < gain_after_signal);
+        // Gain must be held unchanged during speech pause
+        assert_eq!(normalizer.gain, gain_after_speech);
+        assert!(silence.iter().all(|&s| s == 0));
+    }
+
+    #[test]
+    fn auto_gain_soft_limiter_prevents_clipping() {
+        let mut normalizer = AutoGain::default();
+        normalizer.gain = 2.0;
+        let mut loud = vec![30_000i16; 480];
+        normalizer.process(&mut loud);
+
+        // Output must remain strictly bounded without overflow/wrap
+        assert!(loud.iter().all(|&s| s < i16::MAX && s > 0));
+    }
+
+    #[test]
+    fn resample_downsamples_with_area_average() {
+        // 48kHz to 16kHz is 3:1 decimation
+        let input = vec![1000i16, 2000i16, 3000i16, 4000i16, 5000i16, 6000i16];
+        let output = resample(&input, 48_000, 16_000);
+        assert_eq!(output.len(), 2);
+        assert_eq!(output[0], 2000); // (1000 + 2000 + 3000) / 3
+        assert_eq!(output[1], 5000); // (4000 + 5000 + 6000) / 3
     }
 }
