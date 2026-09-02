@@ -1,9 +1,16 @@
 export type AudioSource = "system" | "microphone" | "mixed";
 export type Theme = "light" | "dark";
+export type UiLanguage = "zh-CN" | "en";
 
 export type SessionState = "idle" | "connecting" | "listening" | "stopping" | "error";
 
+export type AppError = {
+  code: string;
+  detail?: string;
+};
+
 export type AppSettings = {
+  ui_language: UiLanguage;
   audio_source: AudioSource;
   target_language: string;
   show_original: boolean;
@@ -23,10 +30,11 @@ export type TranscriptEntry = {
 export type SessionStatus = {
   state: SessionState;
   active: boolean;
-  message?: string;
+  error?: AppError;
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
+  ui_language: "zh-CN",
   audio_source: "system",
   target_language: "zh-CN",
   show_original: true,
@@ -36,24 +44,30 @@ export const DEFAULT_SETTINGS: AppSettings = {
 };
 
 export const LANGUAGE_OPTIONS = [
-  ["zh-CN", "简体中文"],
-  ["zh-TW", "繁體中文"],
-  ["en", "English"],
-  ["ja", "日本語"],
-  ["ko", "한국어"],
-  ["es", "Español"],
-  ["fr", "Français"],
-  ["de", "Deutsch"],
-  ["ru", "Русский"],
+  ["zh-CN", "language.targets.simplifiedChinese"],
+  ["zh-TW", "language.targets.traditionalChinese"],
+  ["en", "language.targets.english"],
+  ["ja", "language.targets.japanese"],
+  ["ko", "language.targets.korean"],
+  ["es", "language.targets.spanish"],
+  ["fr", "language.targets.french"],
+  ["de", "language.targets.german"],
+  ["ru", "language.targets.russian"],
 ] as const;
 
+export const UI_LANGUAGE_OPTIONS = [
+  ["zh-CN", "language.ui.simplifiedChinese"],
+  ["en", "language.ui.english"],
+] as const satisfies readonly (readonly [UiLanguage, string])[];
+
 export const AUDIO_SOURCE_OPTIONS = [
-  ["system", "系统声音"],
-  ["microphone", "麦克风"],
-  ["mixed", "系统声音 + 麦克风"],
+  ["system", "audioSources.system"],
+  ["microphone", "audioSources.microphone"],
+  ["mixed", "audioSources.mixed"],
 ] as const satisfies readonly (readonly [AudioSource, string])[];
 
-export function languageName(code: string) {
-  if (code === "auto") return "自动识别";
-  return LANGUAGE_OPTIONS.find(([value]) => value === code)?.[1] ?? code;
+export function languageName(code: string, translate: (key: string) => string) {
+  if (code === "auto") return translate("language.auto");
+  const option = LANGUAGE_OPTIONS.find(([value]) => value === code);
+  return option ? translate(option[1]) : code;
 }

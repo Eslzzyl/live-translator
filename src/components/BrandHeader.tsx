@@ -1,13 +1,14 @@
 import { Languages, Moon, Settings, Sun } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { SessionStatus, Theme } from "../types";
 
-const STATUS_LABEL: Record<SessionStatus["state"], string> = {
-  idle: "准备就绪",
-  connecting: "正在连接",
-  listening: "正在翻译",
-  stopping: "正在停止",
-  error: "连接异常",
-};
+const STATUS_KEY = {
+  idle: "header.status.idle",
+  connecting: "header.status.connecting",
+  listening: "header.status.listening",
+  stopping: "header.status.stopping",
+  error: "header.status.error",
+} as const satisfies Record<SessionStatus["state"], string>;
 
 export function BrandHeader({
   session,
@@ -20,6 +21,8 @@ export function BrandHeader({
   theme: Theme;
   onToggleTheme: () => void;
 }) {
+  const { t } = useTranslation();
+
   return (
     <header className="topbar">
       <div className="brand-lockup">
@@ -28,22 +31,26 @@ export function BrandHeader({
         </div>
         <div>
           <div className="brand-name">Live Translator</div>
-          <div className="brand-subtitle">实时字幕翻译</div>
+          <div className="brand-subtitle">{t("header.subtitle")}</div>
         </div>
       </div>
       <div className={"connection-status " + session.state}>
         <span className="status-dot" />
-        {STATUS_LABEL[session.state]}
+        {t(STATUS_KEY[session.state])}
       </div>
       <button
         className="icon-button topbar-button"
-        aria-label={theme === "dark" ? "切换浅色模式" : "切换深色模式"}
-        title={theme === "dark" ? "切换浅色模式" : "切换深色模式"}
+        aria-label={theme === "dark" ? t("header.lightMode") : t("header.darkMode")}
+        title={theme === "dark" ? t("header.lightMode") : t("header.darkMode")}
         onClick={onToggleTheme}
       >
         {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
       </button>
-      <button className="icon-button topbar-button" aria-label="设置" onClick={onSettings}>
+      <button
+        className="icon-button topbar-button"
+        aria-label={t("header.settings")}
+        onClick={onSettings}
+      >
         <Settings size={18} />
       </button>
     </header>

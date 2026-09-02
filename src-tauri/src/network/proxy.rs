@@ -2,6 +2,8 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio_tungstenite::{client_async_tls_with_config, connect_async, tungstenite};
 
+use crate::models::AppError;
+
 const GEMINI_HOST: &str = "generativelanguage.googleapis.com:443";
 const MAX_PROXY_RESPONSE_SIZE: usize = 16 * 1024;
 
@@ -17,37 +19,41 @@ struct ProxyEndpoint {
     bypass: String,
 }
 
-pub async fn connect_websocket(url: &str) -> Result<WebSocketConnection, String> {
+pub async fn connect_websocket(url: &str) -> Result<WebSocketConnection, AppError> {
     let Some(proxy) = system_proxy()? else {
-        return connect_async(url)
-            .await
-            .map_err(|error| format!("Gemini 直连失败：{error}"));
+        return connect_async(url).await.map_err(|error| {
+            AppError::with_detail("network.direct_connection_failed", error.to_string())
+        });
     };
 
     if proxy_bypasses_gemini(&proxy.bypass) {
-        return connect_async(url)
-            .await
-            .map_err(|error| format!("Gemini 直连失败：{error}"));
+        return connect_async(url).await.map_err(|error| {
+            AppError::with_detail("network.direct_connection_failed", error.to_string())
+        });
     }
 
     let mut stream = TcpStream::connect((proxy.host.as_str(), proxy.port))
         .await
-        .map_err(|error| format!("无法连接系统代理 {}:{}：{error}", proxy.host, proxy.port))?;
+        .map_err(|error| {
+            AppError::with_detail(
+                "network.proxy_connection_failed",
+                format!("{}:{}: {error}", proxy.host, proxy.port),
+            )
+        })?;
 
-    establish_http_tunnel(&mut stream)
-        .await
-        .map_err(|error| format!("系统代理无法连接 Gemini：{error}"))?;
+    establish_http_tunnel(&mut stream).await?;
 
     client_async_tls_with_config(url, stream, None, None)
         .await
-        .map_err(|error| format!("通过系统代理建立 Gemini WebSocket 失败：{error}"))
+        .map_err(|error| AppError::with_detail("network.proxy_websocket_failed", error.to_string()))
 }
 
-fn system_proxy() -> Result<Option<ProxyEndpoint>, String> {
+fn system_proxy() -> Result<Option<ProxyEndpoint>, AppError> {
     #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
     {
-        let proxy = sysproxy::Sysproxy::get_system_proxy()
-            .map_err(|error| format!("无法读取系统代理设置：{error}"))?;
+        let proxy = sysproxy::Sysproxy::get_system_proxy().map_err(|error| {
+            AppError::with_detail("network.proxy_settings_failed", error.to_string())
+        })?;
         if !proxy.enable || proxy.host.trim().is_empty() || proxy.port == 0 {
             return Ok(None);
         }
@@ -64,31 +70,32 @@ fn system_proxy() -> Result<Option<ProxyEndpoint>, String> {
     }
 }
 
-async fn establish_http_tunnel(stream: &mut TcpStream) -> Result<(), String> {
+async fn establish_http_tunnel(stream: &mut TcpStream) -> Result<(), AppError> {
     let request = format!(
         "CONNECT {GEMINI_HOST} HTTP/1.1\r\nHost: {GEMINI_HOST}\r\nProxy-Connection: Keep-Alive\r\n\r\n"
     );
     stream
         .write_all(request.as_bytes())
         .await
-        .map_err(|error| format!("发送代理 CONNECT 请求失败：{error}"))?;
+        .map_err(|error| {
+            AppError::with_detail("network.proxy_connect_request_failed", error.to_string())
+        })?;
 
     let mut response = Vec::with_capacity(1024);
     let mut chunk = [0_u8; 1024];
     let header_end = loop {
-        let count = stream
-            .read(&mut chunk)
-            .await
-            .map_err(|error| format!("读取代理响应失败：{error}"))?;
+        let count = stream.read(&mut chunk).await.map_err(|error| {
+            AppError::with_detail("network.proxy_response_read_failed", error.to_string())
+        })?;
         if count == 0 {
-            return Err("代理提前关闭了连接。".into());
+            return Err(AppError::new("network.proxy_closed"));
         }
         response.extend_from_slice(&chunk[..count]);
         if let Some(position) = response.windows(4).position(|window| window == b"\r\n\r\n") {
             break position + 4;
         }
         if response.len() > MAX_PROXY_RESPONSE_SIZE {
-            return Err("代理响应头过大。".into());
+            return Err(AppError::new("network.proxy_header_too_large"));
         }
     };
 
@@ -99,9 +106,9 @@ async fn establish_http_tunnel(stream: &mut TcpStream) -> Result<(), String> {
         .and_then(|line| line.split_whitespace().nth(1))
         .and_then(|code| code.parse::<u16>().ok());
     if status != Some(200) {
-        return Err(format!(
-            "代理返回 {}。",
-            status.map_or_else(|| "无效状态".into(), |code| code.to_string())
+        return Err(AppError::with_detail(
+            "network.proxy_status",
+            status.map_or_else(|| "invalid status".into(), |code| code.to_string()),
         ));
     }
     Ok(())

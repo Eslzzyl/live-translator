@@ -5,7 +5,7 @@ use tauri::{AppHandle, State};
 use tokio::sync::oneshot;
 
 use crate::credentials;
-use crate::models::{AppSettings, SessionState, SessionStatus};
+use crate::models::{AppError, AppSettings, SessionState, SessionStatus};
 use crate::{session, settings};
 
 #[derive(Clone)]
@@ -37,27 +37,27 @@ impl AppState {
 }
 
 #[tauri::command]
-pub fn get_settings(app: AppHandle) -> Result<AppSettings, String> {
+pub fn get_settings(app: AppHandle) -> Result<AppSettings, AppError> {
     settings::load(&app)
 }
 
 #[tauri::command]
-pub fn save_settings(app: AppHandle, settings: AppSettings) -> Result<(), String> {
+pub fn save_settings(app: AppHandle, settings: AppSettings) -> Result<(), AppError> {
     settings::save(&app, &settings)
 }
 
 #[tauri::command]
-pub fn export_transcript(app: AppHandle, content: String) -> Result<String, String> {
+pub fn export_transcript(app: AppHandle, content: String) -> Result<String, AppError> {
     settings::export(&app, &content)
 }
 
 #[tauri::command]
-pub fn get_api_key_status() -> Result<bool, String> {
+pub fn get_api_key_status() -> Result<bool, AppError> {
     credentials::read_api_key().map(|value| value.is_some())
 }
 
 #[tauri::command]
-pub fn save_api_key(api_key: String) -> Result<(), String> {
+pub fn save_api_key(api_key: String) -> Result<(), AppError> {
     credentials::save_api_key(&api_key)
 }
 
@@ -66,16 +66,16 @@ pub fn start_translation(
     app: AppHandle,
     state: State<'_, AppState>,
     settings: AppSettings,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     settings.validate()?;
-    let api_key = credentials::read_api_key()?
-        .ok_or_else(|| "请先在设置中保存 Gemini API Key。".to_string())?;
+    let api_key =
+        credentials::read_api_key()?.ok_or_else(|| AppError::new("credentials.missing"))?;
     let mut active = state
         .active_session
         .lock()
-        .map_err(|_| "会话状态不可用。".to_string())?;
+        .map_err(|_| AppError::new("runtime.state_unavailable"))?;
     if active.is_some() {
-        return Err("翻译会话已经在运行。".into());
+        return Err(AppError::new("session.already_running"));
     }
 
     let id = state.next_session_id.fetch_add(1, Ordering::Relaxed);
@@ -99,11 +99,11 @@ pub fn start_translation(
 }
 
 #[tauri::command]
-pub fn stop_translation(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+pub fn stop_translation(app: AppHandle, state: State<'_, AppState>) -> Result<(), AppError> {
     let mut active = state
         .active_session
         .lock()
-        .map_err(|_| "会话状态不可用。".to_string())?;
+        .map_err(|_| AppError::new("runtime.state_unavailable"))?;
     let Some(session) = active.as_mut() else {
         return Ok(());
     };

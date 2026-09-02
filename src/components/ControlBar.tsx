@@ -1,4 +1,5 @@
 import { LoaderCircle, Mic, MonitorSpeaker, Play, Square } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { SelectMenu } from "./SelectMenu";
 import {
   AUDIO_SOURCE_OPTIONS,
@@ -19,36 +20,39 @@ export function ControlBar({
   onChange: (patch: Partial<AppSettings>) => void;
   onToggleSession: () => void;
 }) {
+  const { t } = useTranslation();
   const isRunning = session.active;
+  const audioOptions = AUDIO_SOURCE_OPTIONS.map(([value, key]) => [value, t(key)] as const);
+  const languageOptions = LANGUAGE_OPTIONS.map(([value, key]) => [value, t(key)] as const);
 
   return (
     <section className="control-panel">
       <div className="control-group source-control">
-        <span className="control-label">音频来源</span>
+        <span className="control-label">{t("control.audioSource")}</span>
         <div className="source-select-wrap">
           {settings.audio_source === "system" ? <MonitorSpeaker size={17} /> : <Mic size={17} />}
           <SelectMenu<AudioSource>
             className="source-select"
             value={settings.audio_source}
-            options={AUDIO_SOURCE_OPTIONS}
+            options={audioOptions}
             onChange={(value) => onChange({ audio_source: value })}
-            ariaLabel="音频来源"
+            ariaLabel={t("control.audioSource")}
           />
         </div>
       </div>
       <div className="control-divider" />
       <div className="language-control">
-        <span className="control-label">语言</span>
+        <span className="control-label">{t("control.language")}</span>
         <div className="language-pair">
-          <span className="language-pill">自动识别</span>
+          <span className="language-pill">{t("language.auto")}</span>
           <span className="language-arrow">→</span>
           <div className="language-select-wrap">
             <SelectMenu
               className="language-select"
               value={settings.target_language}
-              options={LANGUAGE_OPTIONS}
+              options={languageOptions}
               onChange={(value) => onChange({ target_language: value })}
-              ariaLabel="目标语言"
+              ariaLabel={t("control.targetLanguage")}
             />
           </div>
         </div>
@@ -66,7 +70,7 @@ export function ControlBar({
         ) : (
           <Play size={17} fill="currentColor" />
         )}
-        {isRunning ? "停止翻译" : "开始翻译"}
+        {isRunning ? t("control.stopTranslation") : t("control.startTranslation")}
       </button>
     </section>
   );

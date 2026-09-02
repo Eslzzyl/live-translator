@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { Copy, Download, Eye, EyeOff, ListFilter, PanelTop, Search, Trash2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { filterTranscript } from "../lib/transcript";
 import type { AudioSource, SessionStatus, TranscriptEntry } from "../types";
 
-const AUDIO_SOURCE_LABEL: Record<AudioSource, string> = {
-  system: "系统声音",
-  microphone: "麦克风",
-  mixed: "系统声音 + 麦克风",
-};
+const AUDIO_SOURCE_KEY = {
+  system: "audioSources.system",
+  microphone: "audioSources.microphone",
+  mixed: "audioSources.mixed",
+} as const satisfies Record<AudioSource, string>;
 
 export function TranscriptPanel({
   entries,
@@ -30,15 +31,19 @@ export function TranscriptPanel({
   onCopy: (entries: TranscriptEntry[]) => void;
   onExport: (entries: TranscriptEntry[]) => void;
 }) {
+  const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const filtered = filterTranscript(entries, query);
+  const audioSourceLabel = t(AUDIO_SOURCE_KEY[audioSource]);
 
   return (
     <section className="workspace-card">
       <div className="workspace-toolbar">
         <div>
-          <div className="section-title">实时字幕</div>
-          <div className="section-caption">本次会话 · {entries.length} 条记录</div>
+          <div className="section-title">{t("transcript.title")}</div>
+          <div className="section-caption">
+            {t("transcript.sessionRecords", { count: entries.length })}
+          </div>
         </div>
         <div className="toolbar-actions">
           <label className="search-box">
@@ -46,25 +51,26 @@ export function TranscriptPanel({
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="搜索字幕"
+              placeholder={t("transcript.searchPlaceholder")}
             />
           </label>
           <button
             className="toolbar-button"
             onClick={onToggleOriginal}
-            title={showOriginal ? "隐藏原文" : "显示原文"}
+            title={showOriginal ? t("transcript.hideOriginal") : t("transcript.showOriginal")}
           >
-            {showOriginal ? <Eye size={16} /> : <EyeOff size={16} />}原文
+            {showOriginal ? <Eye size={16} /> : <EyeOff size={16} />}
+            {t("transcript.original")}
           </button>
           <button className="toolbar-button" onClick={onOpenCaption}>
             <PanelTop size={16} />
-            打开浮窗
+            {t("settings.openCaption")}
           </button>
           <button
             className="icon-button subtle"
             onClick={onClear}
-            aria-label="清空记录"
-            title="清空记录"
+            aria-label={t("transcript.clear")}
+            title={t("transcript.clear")}
           >
             <Trash2 size={16} />
           </button>
@@ -76,12 +82,8 @@ export function TranscriptPanel({
             <div className="empty-icon">
               <ListFilter size={21} />
             </div>
-            <h2>{query ? "没有找到匹配字幕" : "准备好开始了吗？"}</h2>
-            <p>
-              {query
-                ? "换一个关键词试试。"
-                : "点击“开始翻译”，字幕会出现在这里。浮窗可以叠加在视频上方。"}
-            </p>
+            <h2>{query ? t("transcript.noMatchTitle") : t("transcript.emptyTitle")}</h2>
+            <p>{query ? t("transcript.noMatchDescription") : t("transcript.emptyDescription")}</p>
           </div>
         ) : (
           filtered.map((entry) => (
@@ -91,10 +93,12 @@ export function TranscriptPanel({
             >
               <time>{entry.timestamp}</time>
               <div className="transcript-content">
-                <div className="translation-line">{entry.translation || "……"}</div>
+                <div className="translation-line">
+                  {entry.translation || t("transcript.pending")}
+                </div>
                 {showOriginal && <div className="source-line">{entry.source}</div>}
               </div>
-              {!entry.is_final && <span className="live-label">实时</span>}
+              {!entry.is_final && <span className="live-label">{t("transcript.live")}</span>}
             </article>
           ))
         )}
@@ -108,8 +112,8 @@ export function TranscriptPanel({
             <i />
           </span>
           {session.state === "listening"
-            ? `正在接收${AUDIO_SOURCE_LABEL[audioSource]}`
-            : `${AUDIO_SOURCE_LABEL[audioSource]}未启动`}
+            ? t("transcript.receiving", { source: audioSourceLabel })
+            : t("transcript.notStarted", { source: audioSourceLabel })}
         </div>
         <div className="footer-actions">
           <button
@@ -118,7 +122,7 @@ export function TranscriptPanel({
             disabled={filtered.length === 0}
           >
             <Copy size={15} />
-            复制字幕
+            {t("transcript.copy")}
           </button>
           <button
             className="text-button"
@@ -126,7 +130,7 @@ export function TranscriptPanel({
             disabled={filtered.length === 0}
           >
             <Download size={15} />
-            导出
+            {t("transcript.export")}
           </button>
         </div>
       </footer>

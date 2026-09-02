@@ -7,19 +7,21 @@ use tauri::{AppHandle, Manager, WebviewUrl};
 use tokio::sync::oneshot;
 use tokio::time::timeout;
 
+use crate::models::AppError;
+
 const CAPTION_LABEL: &str = "caption";
 const MAIN_LABEL: &str = "main";
 const CAPTION_LOAD_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[tauri::command]
-pub async fn open_caption_window(app: AppHandle) -> Result<(), String> {
+pub async fn open_caption_window(app: AppHandle) -> Result<(), AppError> {
     if let Some(window) = app.get_webview_window(CAPTION_LABEL) {
         window
             .show()
-            .map_err(|error| format!("无法显示字幕浮窗：{error}"))?;
+            .map_err(|error| AppError::with_detail("window.caption_show", error.to_string()))?;
         window
             .set_focus()
-            .map_err(|error| format!("无法聚焦字幕浮窗：{error}"))?;
+            .map_err(|error| AppError::with_detail("window.caption_focus", error.to_string()))?;
         return Ok(());
     }
 
@@ -32,7 +34,7 @@ pub async fn open_caption_window(app: AppHandle) -> Result<(), String> {
         CAPTION_LABEL,
         WebviewUrl::App("index.html?window=caption".into()),
     )
-    .title("Live Translator · 字幕")
+    .title("Live Translator")
     .inner_size(760.0, 170.0)
     .min_inner_size(360.0, 100.0)
     .decorations(false)
@@ -47,7 +49,7 @@ pub async fn open_caption_window(app: AppHandle) -> Result<(), String> {
 
         let result = window
             .show()
-            .map_err(|error| format!("无法显示字幕浮窗：{error}"));
+            .map_err(|error| AppError::with_detail("window.caption_show", error.to_string()));
         let sender = callback_sender
             .lock()
             .ok()
@@ -58,23 +60,23 @@ pub async fn open_caption_window(app: AppHandle) -> Result<(), String> {
         }
     })
     .build()
-    .map_err(|error| format!("无法创建字幕浮窗：{error}"))?;
+    .map_err(|error| AppError::with_detail("window.caption_create", error.to_string()))?;
 
     timeout(CAPTION_LOAD_TIMEOUT, ready_receiver)
         .await
-        .map_err(|_| "字幕浮窗加载超时，请重试。".to_string())?
-        .map_err(|_| "字幕浮窗加载状态丢失，请重试。".to_string())?
+        .map_err(|_| AppError::new("window.caption_load_timeout"))?
+        .map_err(|_| AppError::new("window.caption_ready_lost"))?
 }
 
 #[tauri::command]
-pub fn close_caption_window(app: AppHandle) -> Result<(), String> {
+pub fn close_caption_window(app: AppHandle) -> Result<(), AppError> {
     let Some(window) = app.get_webview_window(CAPTION_LABEL) else {
         return Ok(());
     };
 
     window
         .close()
-        .map_err(|error| format!("无法关闭字幕浮窗：{error}"))
+        .map_err(|error| AppError::with_detail("window.caption_close", error.to_string()))
 }
 
 pub fn handle_run_event(app: &AppHandle, event: &tauri::RunEvent, shutdown_requested: &AtomicBool) {

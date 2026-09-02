@@ -9,7 +9,7 @@ use tokio::sync::oneshot;
 use crate::audio::{AudioCapture, AudioMixer, AudioPlayback};
 use crate::commands::AppState;
 use crate::gemini::{self, SessionOutcome};
-use crate::models::{AppSettings, SessionState, SessionStatus};
+use crate::models::{AppError, AppSettings, SessionState, SessionStatus};
 
 pub fn spawn(
     app: AppHandle,
@@ -29,7 +29,10 @@ pub fn spawn(
             Err(error) => {
                 let _ = app.emit(
                     "session-status",
-                    SessionStatus::error(format!("无法启动会话运行时：{error}"), false),
+                    SessionStatus::error(
+                        AppError::with_detail("runtime.unavailable", error.to_string()),
+                        false,
+                    ),
                 );
                 state_for_cleanup.finish(session_id);
                 return;

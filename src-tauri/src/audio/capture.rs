@@ -2,6 +2,8 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, SampleFormat, Stream};
 use tokio::sync::mpsc::Sender;
 
+use crate::models::AppError;
+
 #[derive(Clone, Copy, Debug)]
 pub enum CaptureKind {
     System,
@@ -21,7 +23,7 @@ impl AudioCapture {
     pub fn start(
         source: &crate::models::AudioSource,
         tx: Sender<AudioChunk>,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, AppError> {
         let host = cpal::default_host();
         let mut streams = Vec::new();
 
@@ -39,7 +41,7 @@ impl AudioCapture {
         ) {
             let device = host
                 .default_input_device()
-                .ok_or_else(|| "找不到默认麦克风。请检查系统录音权限。".to_string())?;
+                .ok_or_else(|| AppError::new("audio.microphone_missing"))?;
             streams.push(build_input_stream(
                 device,
                 CaptureKind::Microphone,
@@ -51,10 +53,10 @@ impl AudioCapture {
     }
 }
 
-fn find_system_device(host: &cpal::Host) -> Result<Device, String> {
-    let devices = host
-        .input_devices()
-        .map_err(|error| format!("无法枚举系统音频设备：{error}"))?;
+fn find_system_device(host: &cpal::Host) -> Result<Device, AppError> {
+    let devices = host.input_devices().map_err(|error| {
+        AppError::with_detail("audio.device_enumeration_failed", error.to_string())
+    })?;
     let candidate = devices.filter_map(|device| {
         let name = device.to_string().to_lowercase();
         let looks_like_loopback = name.contains("loopback")
@@ -80,25 +82,25 @@ fn find_system_device(host: &cpal::Host) -> Result<Device, String> {
         return Ok(device);
     }
 
-    Err(system_device_error().into())
+    Err(system_device_error())
 }
 
-fn system_device_error() -> &'static str {
+fn system_device_error() -> AppError {
     #[cfg(target_os = "windows")]
     {
-        "当前无法打开 Windows 系统音频回录。请检查默认扬声器、系统录音权限，或启用“立体声混音”。"
+        AppError::new("audio.system_unavailable.windows")
     }
     #[cfg(target_os = "linux")]
     {
-        "当前系统没有可用的系统音频回录设备。请在 PipeWire/PulseAudio 中选择 monitor 输入。"
+        AppError::new("audio.system_unavailable.linux")
     }
     #[cfg(target_os = "macos")]
     {
-        "当前系统没有可用的系统音频回录设备。macOS 通常需要 BlackHole 等虚拟音频设备。"
+        AppError::new("audio.system_unavailable.macos")
     }
     #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
     {
-        "当前系统没有可用的系统音频回录设备。"
+        AppError::new("audio.system_unavailable")
     }
 }
 
@@ -106,7 +108,7 @@ fn build_input_stream(
     device: Device,
     source: CaptureKind,
     tx: Sender<AudioChunk>,
-) -> Result<Stream, String> {
+) -> Result<Stream, AppError> {
     let supported = capture_config(&device, source)?;
     let sample_rate = supported.sample_rate();
     let config = supported.config();
@@ -143,20 +145,20 @@ fn build_input_stream(
                 None,
             )
         }
-        _ => return Err("当前音频设备的采样格式暂不支持。".into()),
+        _ => return Err(AppError::new("audio.sample_format_unsupported")),
     }
-    .map_err(|error| format!("无法创建{}音频流：{error}", source_label(source)))?;
+    .map_err(|error| AppError::with_detail("audio.stream_create_failed", error.to_string()))?;
 
     stream
         .play()
-        .map_err(|error| format!("无法启动{}音频流：{error}", source_label(source)))?;
+        .map_err(|error| AppError::with_detail("audio.stream_start_failed", error.to_string()))?;
     Ok(stream)
 }
 
 fn capture_config(
     device: &Device,
     source: CaptureKind,
-) -> Result<cpal::SupportedStreamConfig, String> {
+) -> Result<cpal::SupportedStreamConfig, AppError> {
     #[cfg(target_os = "windows")]
     if matches!(source, CaptureKind::System) {
         // WASAPI loopback reads from an output endpoint. CPAL exposes the
@@ -169,7 +171,7 @@ fn capture_config(
 
     device
         .default_input_config()
-        .map_err(|error| format!("无法打开{}音频配置：{error}", source_label(source)))
+        .map_err(|error| AppError::with_detail("audio.config_failed", error.to_string()))
 }
 
 fn send_samples<T>(

@@ -5,6 +5,7 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{SampleFormat, Stream};
 
 use super::capture::resample;
+use crate::models::AppError;
 
 const OUTPUT_SAMPLE_RATE: u32 = 24_000;
 const MAX_PLAYBACK_SAMPLES: usize = OUTPUT_SAMPLE_RATE as usize * 3;
@@ -16,7 +17,7 @@ pub struct AudioPlayback {
 }
 
 impl AudioPlayback {
-    pub fn start(enabled: bool) -> Result<Option<Self>, String> {
+    pub fn start(enabled: bool) -> Result<Option<Self>, AppError> {
         if !enabled {
             return Ok(None);
         }
@@ -24,10 +25,10 @@ impl AudioPlayback {
         let host = cpal::default_host();
         let device = host
             .default_output_device()
-            .ok_or_else(|| "找不到默认扬声器。".to_string())?;
-        let supported = device
-            .default_output_config()
-            .map_err(|error| format!("无法打开扬声器配置：{error}"))?;
+            .ok_or_else(|| AppError::new("audio.playback_device_missing"))?;
+        let supported = device.default_output_config().map_err(|error| {
+            AppError::with_detail("audio.playback_config_failed", error.to_string())
+        })?;
         let device_rate = supported.sample_rate();
         let config = supported.config();
         let channels = usize::from(config.channels);
@@ -54,13 +55,15 @@ impl AudioPlayback {
                 error_callback,
                 None,
             ),
-            _ => return Err("当前扬声器的采样格式暂不支持。".into()),
+            _ => return Err(AppError::new("audio.playback_sample_format_unsupported")),
         }
-        .map_err(|error| format!("无法创建扬声器流：{error}"))?;
+        .map_err(|error| {
+            AppError::with_detail("audio.playback_stream_create_failed", error.to_string())
+        })?;
 
-        stream
-            .play()
-            .map_err(|error| format!("无法启动扬声器流：{error}"))?;
+        stream.play().map_err(|error| {
+            AppError::with_detail("audio.playback_stream_start_failed", error.to_string())
+        })?;
         Ok(Some(Self {
             _stream: stream,
             queue,

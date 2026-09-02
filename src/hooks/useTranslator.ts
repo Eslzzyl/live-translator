@@ -7,6 +7,7 @@ import {
   type SessionStatus,
   type TranscriptEntry,
 } from "../types";
+import { createAppError, toAppError } from "../lib/errors";
 import { isTauriRuntime } from "../lib/runtime";
 import { mergeTranscriptEntry } from "../lib/transcript";
 
@@ -124,7 +125,7 @@ export function useTranslator(role: WindowRole) {
     setEntries([]);
     if (isTauriRuntime) void emit("transcript-clear").catch(() => undefined);
     await invoke("start_translation", { settings }).catch((error) => {
-      setSession({ state: "error", active: false, message: String(error) });
+      setSession({ state: "error", active: false, error: toAppError(error) });
     });
   }, [session.active, settings]);
 
@@ -137,7 +138,7 @@ export function useTranslator(role: WindowRole) {
     if (!isTauriRuntime) return;
     await invoke("save_api_key", { apiKey });
     const configured = await invoke<boolean>("get_api_key_status");
-    if (!configured) throw new Error("API Key 保存后无法从系统凭据存储读取。");
+    if (!configured) throw createAppError("credentials.readback_failed");
     setApiKeyConfigured(configured);
   }, []);
 

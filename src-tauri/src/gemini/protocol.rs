@@ -8,7 +8,9 @@ use tokio::time::{timeout, Duration};
 use tokio_tungstenite::tungstenite::Message;
 
 use crate::audio::{AudioChunk, AudioMixer, AudioPlayback};
-use crate::models::{AppSettings, AudioSource, SessionState, SessionStatus, TranscriptEntry};
+use crate::models::{
+    AppError, AppSettings, AudioSource, SessionState, SessionStatus, TranscriptEntry,
+};
 use crate::network::connect_websocket;
 
 use super::transcript::TranscriptAccumulator;
@@ -29,21 +31,21 @@ pub async fn run_once(
     mixer: &mut AudioMixer,
     playback: Option<&AudioPlayback>,
     stop_rx: &mut oneshot::Receiver<()>,
-) -> Result<SessionOutcome, String> {
+) -> Result<SessionOutcome, AppError> {
     let url = format!("{ENDPOINT}?key={api_key}");
     let connection = timeout(Duration::from_secs(10), connect_websocket(&url))
         .await
-        .map_err(|_| "Gemini 连接超时。请检查网络或系统代理设置。".to_string())??;
+        .map_err(|_| AppError::new("gemini.connection_timeout"))??;
     let (mut socket, _) = connection;
 
     socket
         .send(Message::Text(setup_message(settings).to_string().into()))
         .await
-        .map_err(|error| format!("无法发送 Gemini 配置：{error}"))?;
+        .map_err(|error| AppError::with_detail("gemini.setup_send_failed", error.to_string()))?;
 
     timeout(Duration::from_secs(10), wait_for_setup(&mut socket))
         .await
-        .map_err(|_| "Gemini 配置确认超时。".to_string())??;
+        .map_err(|_| AppError::new("gemini.setup_timeout"))??;
     emit_status(app, SessionStatus::new(SessionState::Listening));
 
     let mut accumulator = TranscriptAccumulator::new();
@@ -55,7 +57,7 @@ pub async fn run_once(
             }
             chunk = audio_rx.recv() => {
                 let Some(chunk) = chunk else {
-                    return Err("音频采集已停止。".into());
+                    return Err(AppError::new("gemini.audio_capture_stopped"));
                 };
                 let pcm = if matches!(settings.audio_source, AudioSource::Mixed) {
                     mixer.push(chunk)
@@ -76,20 +78,22 @@ pub async fn run_once(
                 socket
                     .send(Message::Text(message.to_string().into()))
                     .await
-                    .map_err(|error| format!("发送音频失败：{error}"))?;
+                    .map_err(|error| AppError::with_detail("gemini.audio_send_failed", error.to_string()))?;
             }
             message = socket.next() => {
                 match message {
                     Some(Ok(Message::Close(frame))) => {
-                        return Err(close_error("Gemini 连接已关闭", frame));
+                        return Err(close_error("gemini.connection_closed", frame));
                     }
-                    None => return Err("Gemini 连接已关闭。".into()),
+                    None => return Err(AppError::new("gemini.connection_closed")),
                     Some(Ok(message)) => {
                         if let Some(text) = message_text(&message)? {
                             handle_server_message(app, text, &mut accumulator, playback)?;
                         }
                     }
-                    Some(Err(error)) => return Err(format!("Gemini 会话异常：{error}")),
+                    Some(Err(error)) => {
+                        return Err(AppError::with_detail("gemini.session_failed", error.to_string()));
+                    }
                 }
             }
         }
@@ -123,51 +127,59 @@ fn target_language_code(code: &str) -> &str {
     }
 }
 
-async fn wait_for_setup<S>(socket: &mut S) -> Result<(), String>
+async fn wait_for_setup<S>(socket: &mut S) -> Result<(), AppError>
 where
     S: Stream<Item = Result<Message, tokio_tungstenite::tungstenite::Error>> + Unpin,
 {
     while let Some(message) = socket.next().await {
-        let message = message.map_err(|error| format!("Gemini 配置失败：{error}"))?;
+        let message = message
+            .map_err(|error| AppError::with_detail("gemini.setup_failed", error.to_string()))?;
         if let Message::Close(frame) = message {
-            return Err(close_error("Gemini 配置被拒绝", frame));
+            return Err(close_error("gemini.setup_rejected", frame));
         }
         let Some(text) = message_text(&message)? else {
             continue;
         };
-        let value: Value =
-            serde_json::from_str(text).map_err(|error| format!("Gemini 返回无效数据：{error}"))?;
+        let value: Value = serde_json::from_str(text).map_err(|error| {
+            AppError::with_detail("gemini.setup_invalid_data", error.to_string())
+        })?;
         if let Some(error) = value.get("error") {
-            return Err(format!("Gemini 配置被拒绝：{error}"));
+            return Err(AppError::with_detail(
+                "gemini.setup_rejected",
+                error.to_string(),
+            ));
         }
         if value.get("setupComplete").is_some() {
             return Ok(());
         }
     }
-    Err("Gemini 未返回配置确认。".into())
+    Err(AppError::new("gemini.setup_not_confirmed"))
 }
 
-fn message_text(message: &Message) -> Result<Option<&str>, String> {
+fn message_text(message: &Message) -> Result<Option<&str>, AppError> {
     match message {
         Message::Text(text) => Ok(Some(text.as_ref())),
         Message::Binary(data) => std::str::from_utf8(data.as_ref())
             .map(Some)
-            .map_err(|error| format!("Gemini 返回无效 UTF-8 数据：{error}")),
+            .map_err(|error| AppError::with_detail("gemini.invalid_data", error.to_string())),
         _ => Ok(None),
     }
 }
 
 fn close_error(
-    prefix: &str,
+    code: &str,
     frame: Option<tokio_tungstenite::tungstenite::protocol::CloseFrame>,
-) -> String {
+) -> AppError {
     let Some(frame) = frame else {
-        return format!("{prefix}。");
+        return AppError::new(code);
     };
     if frame.reason.is_empty() {
-        return format!("{prefix}（WebSocket {:?}）。", frame.code);
+        return AppError::with_detail(code, format!("WebSocket {:?}", frame.code));
     }
-    format!("{prefix}（WebSocket {:?}）：{}", frame.code, frame.reason)
+    AppError::with_detail(
+        code,
+        format!("WebSocket {:?}: {}", frame.code, frame.reason),
+    )
 }
 
 fn handle_server_message(
@@ -175,11 +187,14 @@ fn handle_server_message(
     text: &str,
     accumulator: &mut TranscriptAccumulator,
     playback: Option<&AudioPlayback>,
-) -> Result<(), String> {
-    let value: Value =
-        serde_json::from_str(text).map_err(|error| format!("Gemini 返回无效数据：{error}"))?;
+) -> Result<(), AppError> {
+    let value: Value = serde_json::from_str(text)
+        .map_err(|error| AppError::with_detail("gemini.invalid_data", error.to_string()))?;
     if let Some(error) = value.get("error") {
-        return Err(format!("Gemini 返回错误：{error}"));
+        return Err(AppError::with_detail(
+            "gemini.server_error",
+            error.to_string(),
+        ));
     }
 
     let Some(content) = value.get("serverContent") else {
@@ -205,9 +220,9 @@ fn handle_server_message(
             let Some(data) = inline_data.get("data").and_then(Value::as_str) else {
                 continue;
             };
-            let bytes = STANDARD
-                .decode(data)
-                .map_err(|error| format!("Gemini 音频数据无效：{error}"))?;
+            let bytes = STANDARD.decode(data).map_err(|error| {
+                AppError::with_detail("gemini.audio_invalid", error.to_string())
+            })?;
             if let Some(playback) = playback {
                 playback.push(&bytes);
             }

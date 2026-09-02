@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CircleHelp } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { BrandHeader } from "./components/BrandHeader";
 import { CaptionWindow } from "./components/CaptionWindow";
 import { ControlBar } from "./components/ControlBar";
@@ -9,16 +10,26 @@ import { useTranslator } from "./hooks/useTranslator";
 import { useTheme } from "./hooks/useTheme";
 import { copyTranscript, exportTranscript } from "./lib/transcriptActions";
 import { closeCaptionWindow, openCaptionWindow } from "./lib/windows";
+import { formatAppError } from "./lib/errors";
 import { isCaptionWindow, isTauriRuntime } from "./lib/runtime";
 import "./styles/app.css";
 
 function App() {
   const captionWindow = isCaptionWindow();
+  const { i18n, t } = useTranslation();
   const { theme, toggleTheme } = useTheme();
   const translator = useTranslator(captionWindow ? "caption" : "main");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [overlayOpen, setOverlayOpen] = useState(false);
   const [windowError, setWindowError] = useState("");
+
+  useEffect(() => {
+    if (i18n.language !== translator.settings.ui_language) {
+      void i18n.changeLanguage(translator.settings.ui_language);
+    }
+    document.documentElement.lang = translator.settings.ui_language;
+    document.title = t("app.documentTitle");
+  }, [i18n, t, translator.settings.ui_language]);
 
   if (captionWindow) {
     return <CaptionWindow settings={translator.settings} entries={translator.entries} />;
@@ -30,7 +41,7 @@ function App() {
       const opened = await openCaptionWindow();
       if (opened || !isTauriRuntime) setOverlayOpen(true);
     } catch (error) {
-      setWindowError(`浮窗打开失败：${String(error)}`);
+      setWindowError(formatAppError(error, t, "errors.windowCaptionShow"));
     }
   }
 
@@ -40,7 +51,7 @@ function App() {
       await closeCaptionWindow();
       setOverlayOpen(false);
     } catch (error) {
-      setWindowError(`浮窗关闭失败：${String(error)}`);
+      setWindowError(formatAppError(error, t, "errors.windowCaptionClose"));
     }
   }
 
@@ -61,7 +72,7 @@ function App() {
       {translator.session.state === "error" && (
         <div className="error-banner">
           <CircleHelp size={17} />
-          {translator.session.message || "无法连接到 Gemini，请检查 API Key 和网络。"}
+          {formatAppError(translator.session.error, t, "errors.connectionFallback")}
         </div>
       )}
       {windowError && (
@@ -96,11 +107,11 @@ function App() {
       )}
       {overlayOpen && !isTauriRuntime && (
         <div className="browser-overlay-preview">
-          <button onClick={() => setOverlayOpen(false)} aria-label="关闭浮窗">
+          <button onClick={() => setOverlayOpen(false)} aria-label={t("settings.closeCaption")}>
             ×
           </button>
-          <strong>翻译字幕预览</strong>
-          <span>桌面版中会显示独立字幕浮窗。</span>
+          <strong>{t("app.captionPreviewTitle")}</strong>
+          <span>{t("app.captionPreviewDescription")}</span>
         </div>
       )}
     </main>

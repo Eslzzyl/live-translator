@@ -1,6 +1,8 @@
 import { useState, type CSSProperties } from "react";
 import { X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { closeCurrentCaptionWindow } from "../lib/windows";
+import { formatAppError } from "../lib/errors";
 import type { AppSettings, TranscriptEntry } from "../types";
 
 export function CaptionWindow({
@@ -10,6 +12,7 @@ export function CaptionWindow({
   settings: AppSettings;
   entries: TranscriptEntry[];
 }) {
+  const { t } = useTranslation();
   const [windowError, setWindowError] = useState("");
 
   async function handleClose() {
@@ -17,7 +20,7 @@ export function CaptionWindow({
     try {
       await closeCurrentCaptionWindow();
     } catch (error) {
-      setWindowError(`浮窗关闭失败：${String(error)}`);
+      setWindowError(formatAppError(error, t, "errors.windowCaptionClose"));
     }
   }
 
@@ -38,8 +41,8 @@ export function CaptionWindow({
         <button
           className="caption-close-button"
           type="button"
-          aria-label="关闭字幕浮窗"
-          title="关闭字幕浮窗"
+          aria-label={t("caption.close")}
+          title={t("caption.close")}
           onClick={() => void handleClose()}
         >
           <X size={16} />
@@ -51,14 +54,14 @@ export function CaptionWindow({
         </p>
       )}
       {entries.length === 0 ? (
-        <p className="caption-empty">等待字幕……</p>
+        <p className="caption-empty">{t("caption.waiting")}</p>
       ) : (
         entries.slice(-4).map((entry) => (
           <article
             className={"caption-line " + (entry.is_final ? "final" : "partial")}
             key={entry.id}
           >
-            <p className="caption-translation">{entry.translation || "……"}</p>
+            <p className="caption-translation">{entry.translation || t("caption.pending")}</p>
             {settings.show_original && <p className="caption-source">{entry.source}</p>}
           </article>
         ))

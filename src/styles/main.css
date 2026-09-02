@@ -136,6 +136,12 @@
   font-size: 13px;
   text-align: left;
 }
+.select-trigger > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .select-trigger svg {
   flex: 0 0 auto;
   color: var(--muted);
@@ -202,7 +208,7 @@
   color: #586479;
 }
 .language-select {
-  min-width: 110px;
+  min-width: 145px;
 }
 .language-select .select-trigger {
   font-weight: 600;
@@ -506,6 +512,9 @@
   gap: 22px;
   align-items: center;
   min-height: 51px;
+}
+.setting-row > div:first-child {
+  min-width: 0;
 }
 .setting-row strong {
   display: block;
