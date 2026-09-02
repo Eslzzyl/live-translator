@@ -19,17 +19,17 @@ export function useTranslator(role: WindowRole) {
   const [session, setSession] = useState<SessionStatus>({ state: "idle", active: false });
   const [audioLevel, setAudioLevel] = useState(0);
   const [apiKeyConfigured, setApiKeyConfigured] = useState(false);
+  const [transcriptLoaded, setTranscriptLoaded] = useState(false);
   const settingsLoaded = useRef(false);
 
   useEffect(() => {
-    if (role === "caption") {
-      try {
-        const stored = localStorage.getItem("live-transcript-session");
-        if (stored) setEntries(JSON.parse(stored) as TranscriptEntry[]);
-      } catch {
-        // A stale browser preview entry should not stop the caption window.
-      }
+    try {
+      const stored = localStorage.getItem("live-transcript-session");
+      if (stored) setEntries(JSON.parse(stored) as TranscriptEntry[]);
+    } catch {
+      // A stale browser preview entry should not stop either window.
     }
+    setTranscriptLoaded(true);
 
     if (!isTauriRuntime) {
       settingsLoaded.current = true;
@@ -75,7 +75,7 @@ export function useTranslator(role: WindowRole) {
         listen<TranscriptEntry>("transcript-update", (event) => {
           if (!disposed) {
             setEntries((current) =>
-              mergeTranscriptEntry(current, event.payload, role === "main" ? 500 : 8),
+              mergeTranscriptEntry(current, event.payload, role === "main" ? null : 8),
             );
           }
         }),
@@ -102,12 +102,13 @@ export function useTranslator(role: WindowRole) {
   }, [role]);
 
   useEffect(() => {
+    if (!transcriptLoaded) return;
     try {
       localStorage.setItem("live-transcript-session", JSON.stringify(entries));
     } catch {
       // The transcript remains available in React state if storage is blocked.
     }
-  }, [entries]);
+  }, [entries, transcriptLoaded]);
 
   useEffect(() => {
     if (role !== "main" || !isTauriRuntime || !settingsLoaded.current) return;

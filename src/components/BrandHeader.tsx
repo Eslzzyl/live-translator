@@ -6,6 +6,7 @@ import { AppLogo } from "./AppLogo";
 const STATUS_KEY = {
   idle: "header.status.idle",
   connecting: "header.status.connecting",
+  reconnecting: "header.status.reconnecting",
   listening: "header.status.listening",
   stopping: "header.status.stopping",
   error: "header.status.error",

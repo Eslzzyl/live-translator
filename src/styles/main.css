@@ -72,6 +72,11 @@
   border-color: rgba(59, 130, 246, 0.25);
 }
 
+.connection-status.reconnecting {
+  color: var(--accent);
+  border-color: rgba(59, 130, 246, 0.25);
+}
+
 .connection-status.error {
   color: var(--danger);
   border-color: rgba(244, 63, 94, 0.3);
@@ -91,6 +96,11 @@
 }
 
 .connecting .status-dot {
+  background: var(--accent);
+  animation: pulse 1.2s infinite ease-in-out;
+}
+
+.reconnecting .status-dot {
   background: var(--accent);
   animation: pulse 1.2s infinite ease-in-out;
 }

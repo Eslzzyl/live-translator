@@ -17,8 +17,9 @@ export function filterTranscript(entries: TranscriptEntry[], query: string) {
 export function mergeTranscriptEntry(
   entries: TranscriptEntry[],
   incoming: TranscriptEntry,
-  limit = 500,
+  limit: number | null = 500,
 ) {
   const next = entries.filter((entry) => entry.id !== incoming.id);
-  return [...next, incoming].slice(-limit);
+  const merged = [...next, incoming];
+  return limit === null ? merged : merged.slice(-limit);
 }

@@ -1,5 +1,7 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use chrono::Local;
+
 use crate::models::TranscriptEntry;
 
 static NEXT_TURN_ID: AtomicU64 = AtomicU64::new(1);
@@ -74,6 +76,10 @@ impl TranscriptAccumulator {
             || !self.translation.is_empty()
     }
 
+    pub(super) fn has_translation(&self) -> bool {
+        !self.translation.is_empty()
+    }
+
     pub(super) fn entry(&self, is_final: bool) -> TranscriptEntry {
         let mut source = self.source_committed.clone();
         source.push_str(&self.source_interim);
@@ -111,16 +117,7 @@ fn append_transcript(target: &mut String, text: &str) {
 }
 
 fn timestamp_now() -> String {
-    let seconds = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|duration| duration.as_secs() % 86_400)
-        .unwrap_or_default();
-    format!(
-        "{:02}:{:02}:{:02}",
-        seconds / 3_600,
-        (seconds % 3_600) / 60,
-        seconds % 60
-    )
+    Local::now().format("%H:%M:%S").to_string()
 }
 
 #[cfg(test)]

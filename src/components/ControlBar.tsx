@@ -79,10 +79,10 @@ export function ControlBar({
 
       <button
         type="button"
-        className={`primary-button session-button ${session.state === "listening" ? "active" : ""}`}
+        className={`primary-button session-button ${session.state === "listening" || session.state === "reconnecting" ? "active" : ""}`}
         onClick={onToggleSession}
       >
-        {session.state === "connecting" ? (
+        {session.state === "connecting" || session.state === "reconnecting" ? (
           <LoaderCircle className="spin" size={16} />
         ) : isRunning ? (
           <Square size={14} fill="currentColor" />

@@ -124,6 +124,7 @@ impl AppSettings {
 pub enum SessionState {
     Idle,
     Connecting,
+    Reconnecting,
     Listening,
     Stopping,
     Error,
@@ -141,7 +142,10 @@ impl SessionStatus {
     pub fn new(state: SessionState) -> Self {
         let active = matches!(
             state,
-            SessionState::Connecting | SessionState::Listening | SessionState::Stopping
+            SessionState::Connecting
+                | SessionState::Reconnecting
+                | SessionState::Listening
+                | SessionState::Stopping
         );
         Self {
             state,

@@ -5,7 +5,13 @@ export type UiLanguage = "zh-CN" | "en";
 export type ThemeMode = "dark" | "light" | "system";
 export type ColorTheme = "zinc" | "midnight" | "nord" | "forest" | "sepia";
 
-export type SessionState = "idle" | "connecting" | "listening" | "stopping" | "error";
+export type SessionState =
+  | "idle"
+  | "connecting"
+  | "reconnecting"
+  | "listening"
+  | "stopping"
+  | "error";
 
 export type AppError = {
   code: string;

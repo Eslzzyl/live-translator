@@ -2369,6 +2369,7 @@ name = "live-translator"
 version = "0.1.0"
 dependencies = [
  "base64 0.23.1",
+ "chrono",
  "cpal",
  "futures-util",
  "keyring",

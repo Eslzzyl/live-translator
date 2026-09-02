@@ -95,7 +95,7 @@ export function TranscriptPanel({
     }, 1500);
   };
 
-  const isListening = session.state === "listening";
+  const isListening = session.state === "listening" || session.state === "reconnecting";
 
   // Dynamic equalizer bars based on real-time audio energy (3px..14px)
   const h1 =
@@ -273,7 +273,7 @@ export function TranscriptPanel({
             <i style={{ height: `${h4}px` }} />
           </span>
           <span className="status-caption">
-            {session.state === "listening"
+            {isListening
               ? t("transcript.receiving", { source: audioSourceLabel })
               : t("transcript.notStarted", { source: audioSourceLabel })}
           </span>

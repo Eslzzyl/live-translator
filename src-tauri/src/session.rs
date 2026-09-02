@@ -50,8 +50,8 @@ async fn run(
     mut stop_rx: oneshot::Receiver<()>,
     _session_id: u64,
 ) {
-    let (audio_tx, mut audio_rx) = mpsc::channel(64);
-    let _capture = match AudioCapture::start(&settings.audio_source, audio_tx) {
+    let (audio_tx, mut audio_rx) = mpsc::channel(256);
+    let mut capture = match AudioCapture::start(&settings.audio_source, audio_tx.clone()) {
         Ok(capture) => capture,
         Err(error) => {
             let _ = app.emit("session-status", SessionStatus::error(error, false));
@@ -70,16 +70,36 @@ async fn run(
         "session-status",
         SessionStatus::new(SessionState::Connecting),
     );
+    let mut resume_handle = None;
+    let mut audio_buffer = Vec::new();
+    let mut session_resumption = true;
+    let mut context_window_compression = true;
 
     loop {
+        let audio_health = capture.health();
+        eprintln!(
+            "[session] run_attempt session_resumption={} context_window_compression={} resume_handle_present={}",
+            session_resumption,
+            context_window_compression,
+            resume_handle.is_some()
+        );
         match gemini::run_once(
             &app,
             &api_key,
             &settings,
-            &mut audio_rx,
-            &mut mixer,
-            playback.as_ref(),
-            &mut stop_rx,
+            gemini::RunContext {
+                audio_rx: &mut audio_rx,
+                mixer: &mut mixer,
+                playback: playback.as_ref(),
+                stop_rx: &mut stop_rx,
+                resume_handle: &mut resume_handle,
+                audio_buffer: &mut audio_buffer,
+                audio_health: &audio_health,
+            },
+            gemini::RunOptions {
+                session_resumption,
+                context_window_compression,
+            },
         )
         .await
         {
@@ -88,19 +108,78 @@ async fn run(
                 let _ = app.emit("session-status", SessionStatus::new(SessionState::Idle));
                 return;
             }
-            Err(error) => {
+            Ok(SessionOutcome::Reconnect) => {
+                eprintln!("[session] server_requested_reconnect");
                 let _ = app.emit("audio-level", 0.0f32);
-                let _ = app.emit("session-status", SessionStatus::error(error, true));
-                tokio::select! {
-                    _ = &mut stop_rx => {
-                        let _ = app.emit("session-status", SessionStatus::new(SessionState::Idle));
-                        return;
+                let _ = app.emit(
+                    "session-status",
+                    SessionStatus::new(SessionState::Reconnecting),
+                );
+            }
+            Err(error) => {
+                eprintln!("[session] run_error code={}", error.code);
+                if error.code == "audio.capture_stalled" {
+                    eprintln!(
+                        "[session] audio_capture_stalled; recreating_capture_stream detail={}",
+                        error.detail.as_deref().unwrap_or("none")
+                    );
+                    drop(capture);
+                    capture = match AudioCapture::start(&settings.audio_source, audio_tx.clone()) {
+                        Ok(capture) => capture,
+                        Err(restart_error) => {
+                            eprintln!(
+                                "[session] audio_capture_restart_failed code={}",
+                                restart_error.code
+                            );
+                            let _ = app
+                                .emit("session-status", SessionStatus::error(restart_error, false));
+                            return;
+                        }
+                    };
+                }
+                if error.code == "gemini.setup_rejected" {
+                    if session_resumption {
+                        eprintln!(
+                            "[session] setup_rejected; disabling_session_resumption_and_retrying"
+                        );
+                        session_resumption = false;
+                        resume_handle = None;
+                        let _ = app.emit(
+                            "session-status",
+                            SessionStatus::new(SessionState::Reconnecting),
+                        );
+                        continue;
                     }
-                    _ = tokio::time::sleep(Duration::from_secs(2)) => {}
+                    if context_window_compression {
+                        eprintln!(
+                            "[session] setup_rejected; disabling_context_window_compression_and_retrying"
+                        );
+                        context_window_compression = false;
+                        resume_handle = None;
+                        let _ = app.emit(
+                            "session-status",
+                            SessionStatus::new(SessionState::Reconnecting),
+                        );
+                        continue;
+                    }
+                }
+                let _ = app.emit("audio-level", 0.0f32);
+                let response_stalled = error.code == "gemini.response_stalled";
+                let _ = app.emit("session-status", SessionStatus::error(error, true));
+                if response_stalled {
+                    eprintln!("[session] response_stalled; retrying_without_delay");
+                } else {
+                    tokio::select! {
+                        _ = &mut stop_rx => {
+                            let _ = app.emit("session-status", SessionStatus::new(SessionState::Idle));
+                            return;
+                        }
+                        _ = tokio::time::sleep(Duration::from_secs(2)) => {}
+                    }
                 }
                 let _ = app.emit(
                     "session-status",
-                    SessionStatus::new(SessionState::Connecting),
+                    SessionStatus::new(SessionState::Reconnecting),
                 );
             }
         }
