@@ -576,8 +576,10 @@ mod tests {
 
     #[test]
     fn auto_gain_soft_limiter_prevents_clipping() {
-        let mut normalizer = AutoGain::default();
-        normalizer.gain = 2.0;
+        let mut normalizer = AutoGain {
+            gain: 2.0,
+            ..AutoGain::default()
+        };
         let mut loud = vec![30_000i16; 480];
         normalizer.process(&mut loud);
 
