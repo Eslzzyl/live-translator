@@ -22,7 +22,7 @@ live-translator/
     ├── windows.rs             # 独立无边框字幕浮窗管理与联动退出
     ├── session.rs             # 翻译会话管理 (Tokio 线程、重连循环)
     ├── settings.rs            # JSON 配置读写 (`app_config_dir`) 与字幕导出
-    ├── credentials.rs         # Keyring 系统凭据存储 (`GEMINI_API_KEY` fallback)
+    ├── credentials.rs         # 应用配置目录中的加密 API Key 文件存储 (`GEMINI_API_KEY` fallback)
     ├── network/proxy.rs       # 系统代理嗅探 (`sysproxy`) 与 HTTP CONNECT TLS 隧道
     ├── audio/                 # 音频捕获 (WASAPI loopback/Mic)、重采样至 16kHz、混音与回放
     └── gemini/                # Gemini WebSocket (`gemini-3.5-live-translate-preview`) 与字幕累加器
@@ -92,7 +92,7 @@ sequenceDiagram
 
 ## 4. AI Agent 编码准则
 
-1. **凭据安全**：API Key 严禁写入 `settings.json` 或明文日志，必须通过 `credentials.rs` 存入系统 `keyring`。
+1. **凭据安全**：API Key 严禁写入 `settings.json` 或明文日志；通过 `credentials.rs` 使用固定应用密钥加密后存入应用配置目录的 `api-key` 文件，Unix 文件权限为 `0600`。
 2. **数据同步**：修改 `src-tauri/src/models.rs` 时必须同步更新 `src/types.ts`，字段保持 `snake_case`。
 3. **跨平台兼容**：音频采集与网络代理需保持 Windows / macOS / Linux 适配与友好异常提示。
 4. **禁止 Emoji**：整个仓库（包括代码、注释、提交信息、文档、UI 文本等所有地方）严禁使用任何 Emoji。

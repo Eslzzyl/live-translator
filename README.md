@@ -8,7 +8,7 @@
 - 支持历史字幕搜索、复制、导出，以及独立置顶字幕浮窗。
 - 转写历史仅保留在当前运行会话的内存中；长记录使用虚拟列表，关闭应用后不恢复。
 - 默认丢弃模型返回音频；在设置中启用后，可以通过默认扬声器播放。
-- 设置写入应用配置目录，Gemini API Key 写入系统凭据存储。
+- 设置写入应用配置目录，Gemini API Key 使用固定应用密钥加密后写入同一目录下的 `api-key` 文件。
 - Gemini WebSocket 自动遵循 Windows、macOS、Linux 的系统代理设置；未启用系统代理时直连。
 
 ## 目录结构
@@ -17,7 +17,7 @@
 
 - models.rs：前后端共享的数据模型。
 - settings.rs：配置和字幕导出。
-- credentials.rs：系统凭据存储。
+- credentials.rs：应用配置目录中的加密 API Key 文件存储。
 - audio.rs：CPAL 音频采集、混音和可选播放。
 - gemini.rs：Gemini Live WebSocket 协议和字幕事件解析。
 - session.rs：会话线程、重连和生命周期。

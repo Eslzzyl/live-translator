@@ -149,7 +149,7 @@ export function SettingsDialog({
                 {apiKeySaveState === "saved" && (
                   <small className="api-key-feedback success">
                     <Check size={13} />
-                    {t("settings.savedToCredentialStore")}
+                    {t("settings.savedToLocalFile")}
                   </small>
                 )}
                 {apiKeySaveState === "error" && (

@@ -31,13 +31,14 @@ log = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 base64 = "0.23.1"
+chacha20poly1305 = "0.10"
 chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
 cpal = "0.18.2"
 futures-util = "0.3.34"
-keyring = { version = "4.2.0", features = ["android-native-keyring-store"] }
 tokio = { version = "1.53.1", features = ["macros", "net", "rt", "sync", "time"] }
 tokio-tungstenite = { version = "0.30.0", features = ["rustls-tls-native-roots"] }
 rustls = { version = "0.23.43", default-features = false, features = ["ring", "std", "tls12"] }
+sha2 = "0.10"
 
 [target.'cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))'.dependencies]
 sysproxy = "0.3.0"

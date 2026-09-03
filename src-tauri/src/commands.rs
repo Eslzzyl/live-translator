@@ -125,13 +125,13 @@ pub fn export_transcript(app: AppHandle, content: String) -> Result<String, AppE
 }
 
 #[tauri::command]
-pub fn get_api_key_status() -> Result<bool, AppError> {
-    credentials::read_api_key().map(|value| value.is_some())
+pub fn get_api_key_status(app: AppHandle) -> Result<bool, AppError> {
+    credentials::read_api_key(&app).map(|value| value.is_some())
 }
 
 #[tauri::command]
-pub fn save_api_key(api_key: String) -> Result<(), AppError> {
-    credentials::save_api_key(&api_key)
+pub fn save_api_key(app: AppHandle, api_key: String) -> Result<(), AppError> {
+    credentials::save_api_key(&app, &api_key)
 }
 
 #[tauri::command]
@@ -142,7 +142,7 @@ pub fn start_translation(
 ) -> Result<(), AppError> {
     settings.validate()?;
     let api_key =
-        credentials::read_api_key()?.ok_or_else(|| AppError::new("credentials.missing"))?;
+        credentials::read_api_key(&app)?.ok_or_else(|| AppError::new("credentials.missing"))?;
     let mut active = state
         .active_session
         .lock()

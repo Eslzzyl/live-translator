@@ -4,6 +4,8 @@ import type { AppError } from "../types";
 const ERROR_TRANSLATION_KEYS = {
   "credentials.missing": "errors.credentialsMissing",
   "credentials.empty_key": "errors.credentialsEmpty",
+  "credentials.path": "errors.credentialsPath",
+  "credentials.directory": "errors.credentialsDirectory",
   "credentials.read_failed": "errors.credentialsReadFailed",
   "credentials.save_failed": "errors.credentialsSaveFailed",
   "credentials.readback_failed": "errors.credentialsReadbackFailed",
