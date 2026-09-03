@@ -1,14 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { TranscriptEntry } from "../types";
+import type { SessionMode, TranscriptItem } from "../types";
 import { isTauriRuntime } from "./runtime";
 import { formatTranscript } from "./transcript";
 
-export async function copyTranscript(entries: TranscriptEntry[]) {
-  await navigator.clipboard.writeText(formatTranscript(entries));
+export async function copyTranscript(entries: TranscriptItem[], mode: SessionMode) {
+  await navigator.clipboard.writeText(formatTranscript(entries, mode));
 }
 
-export async function exportTranscript(entries: TranscriptEntry[]) {
-  const content = formatTranscript(entries);
+export async function exportTranscript(entries: TranscriptItem[], mode: SessionMode) {
+  const content = formatTranscript(entries, mode);
   if (isTauriRuntime) {
     await invoke("export_transcript", { content });
     return;

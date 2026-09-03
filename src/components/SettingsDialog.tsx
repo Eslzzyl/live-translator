@@ -1,6 +1,7 @@
 import {
   Check,
   CircleAlert,
+  AudioWaveform,
   Eye,
   EyeOff,
   Globe,
@@ -17,6 +18,7 @@ import { formatAppError } from "../lib/errors";
 import {
   AUDIO_SOURCE_OPTIONS,
   COLOR_THEME_OPTIONS,
+  TRANSCRIPTION_STYLE_OPTIONS,
   THEME_MODE_OPTIONS,
   UI_LANGUAGE_OPTIONS,
   type AppSettings,
@@ -30,12 +32,14 @@ export function SettingsDialog({
   onClose,
   apiKeyConfigured,
   onSaveApiKey,
+  sessionActive,
 }: {
   settings: AppSettings;
   onChange: (patch: Partial<AppSettings>) => void;
   onClose: () => void;
   apiKeyConfigured: boolean;
   onSaveApiKey: (apiKey: string) => Promise<void>;
+  sessionActive: boolean;
 }) {
   const { t } = useTranslation();
   const [apiKey, setApiKey] = useState("");
@@ -62,6 +66,9 @@ export function SettingsDialog({
   const uiLanguageOptions = UI_LANGUAGE_OPTIONS.map(([value, key]) => [value, t(key)] as const);
   const themeModeOptions = THEME_MODE_OPTIONS.map(([value, key]) => [value, t(key)] as const);
   const colorThemeOptions = COLOR_THEME_OPTIONS.map((item) => [item.id, t(item.nameKey)] as const);
+  const transcriptionStyleOptions = TRANSCRIPTION_STYLE_OPTIONS.map(
+    ([value, key]) => [value, t(key)] as const,
+  );
 
   return (
     <div
@@ -166,21 +173,40 @@ export function SettingsDialog({
                 options={audioOptions}
                 onChange={(value) => onChange({ audio_source: value })}
                 ariaLabel={t("settings.defaultSource")}
+                disabled={sessionActive}
               />
             </SettingRow>
             <SettingRow
               label={t("settings.playback")}
-              description={t("settings.playbackDescription")}
+              description={
+                settings.session_mode === "transcription"
+                  ? t("settings.transcriptionNoPlayback")
+                  : t("settings.playbackDescription")
+              }
             >
               <button
                 type="button"
                 className={"toggle " + (settings.playback_enabled ? "on" : "")}
                 onClick={() => onChange({ playback_enabled: !settings.playback_enabled })}
                 aria-pressed={settings.playback_enabled}
+                disabled={sessionActive || settings.session_mode === "transcription"}
               >
                 <span />
                 <b>{settings.playback_enabled ? t("settings.on") : t("settings.off")}</b>
               </button>
+            </SettingRow>
+          </SettingSection>
+
+          <SettingSection icon={<AudioWaveform size={15} />} title={t("settings.transcription")}>
+            <SettingRow label={t("settings.transcriptionStyle")}>
+              <SelectMenu
+                className="setting-select-menu"
+                value={settings.transcription_style}
+                options={transcriptionStyleOptions}
+                onChange={(value) => onChange({ transcription_style: value })}
+                ariaLabel={t("settings.transcriptionStyle")}
+                disabled={sessionActive}
+              />
             </SettingRow>
           </SettingSection>
 

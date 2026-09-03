@@ -32,14 +32,16 @@ pub fn spawn(
                     SessionStatus::error(
                         AppError::with_detail("runtime.unavailable", error.to_string()),
                         false,
+                        settings.session_mode.clone(),
+                        Some(session_id),
                     ),
                 );
                 state_for_cleanup.finish(session_id);
                 return;
             }
         };
-        runtime.block_on(run(app, settings, api_key, stop_rx, session_id));
-        state.finish(session_id);
+        runtime.block_on(run(app, settings, api_key, stop_rx, session_id, state));
+        state_for_cleanup.finish(session_id);
     })
 }
 
@@ -48,27 +50,54 @@ async fn run(
     settings: AppSettings,
     api_key: String,
     mut stop_rx: oneshot::Receiver<()>,
-    _session_id: u64,
+    session_id: u64,
+    state: Arc<AppState>,
 ) {
     let (audio_tx, mut audio_rx) = mpsc::channel(256);
     let mut capture = match AudioCapture::start(&settings.audio_source, audio_tx.clone()) {
         Ok(capture) => capture,
         Err(error) => {
-            let _ = app.emit("session-status", SessionStatus::error(error, false));
+            let _ = app.emit(
+                "session-status",
+                SessionStatus::error(
+                    error,
+                    false,
+                    settings.session_mode.clone(),
+                    Some(session_id),
+                ),
+            );
             return;
         }
     };
-    let playback = match AudioPlayback::start(settings.playback_enabled) {
+    let playback = match AudioPlayback::start(
+        settings.playback_enabled
+            && matches!(
+                &settings.session_mode,
+                crate::models::SessionMode::Translation
+            ),
+    ) {
         Ok(playback) => playback,
         Err(error) => {
-            let _ = app.emit("session-status", SessionStatus::error(error, false));
+            let _ = app.emit(
+                "session-status",
+                SessionStatus::error(
+                    error,
+                    false,
+                    settings.session_mode.clone(),
+                    Some(session_id),
+                ),
+            );
             return;
         }
     };
     let mut mixer = AudioMixer::new();
     let _ = app.emit(
         "session-status",
-        SessionStatus::new(SessionState::Connecting),
+        SessionStatus::new(
+            SessionState::Connecting,
+            settings.session_mode.clone(),
+            Some(session_id),
+        ),
     );
     let mut resume_handle = None;
     let mut audio_buffer = Vec::new();
@@ -95,6 +124,8 @@ async fn run(
                 resume_handle: &mut resume_handle,
                 audio_buffer: &mut audio_buffer,
                 audio_health: &audio_health,
+                session_id,
+                state: &state,
             },
             gemini::RunOptions {
                 session_resumption,
@@ -105,7 +136,14 @@ async fn run(
         {
             Ok(SessionOutcome::Stopped) => {
                 let _ = app.emit("audio-level", 0.0f32);
-                let _ = app.emit("session-status", SessionStatus::new(SessionState::Idle));
+                let _ = app.emit(
+                    "session-status",
+                    SessionStatus::new(
+                        SessionState::Idle,
+                        settings.session_mode.clone(),
+                        Some(session_id),
+                    ),
+                );
                 return;
             }
             Ok(SessionOutcome::Reconnect) => {
@@ -113,7 +151,11 @@ async fn run(
                 let _ = app.emit("audio-level", 0.0f32);
                 let _ = app.emit(
                     "session-status",
-                    SessionStatus::new(SessionState::Reconnecting),
+                    SessionStatus::new(
+                        SessionState::Reconnecting,
+                        settings.session_mode.clone(),
+                        Some(session_id),
+                    ),
                 );
             }
             Err(error) => {
@@ -131,8 +173,15 @@ async fn run(
                                 "[session] audio_capture_restart_failed code={}",
                                 restart_error.code
                             );
-                            let _ = app
-                                .emit("session-status", SessionStatus::error(restart_error, false));
+                            let _ = app.emit(
+                                "session-status",
+                                SessionStatus::error(
+                                    restart_error,
+                                    false,
+                                    settings.session_mode.clone(),
+                                    Some(session_id),
+                                ),
+                            );
                             return;
                         }
                     };
@@ -146,7 +195,11 @@ async fn run(
                         resume_handle = None;
                         let _ = app.emit(
                             "session-status",
-                            SessionStatus::new(SessionState::Reconnecting),
+                            SessionStatus::new(
+                                SessionState::Reconnecting,
+                                settings.session_mode.clone(),
+                                Some(session_id),
+                            ),
                         );
                         continue;
                     }
@@ -158,20 +211,39 @@ async fn run(
                         resume_handle = None;
                         let _ = app.emit(
                             "session-status",
-                            SessionStatus::new(SessionState::Reconnecting),
+                            SessionStatus::new(
+                                SessionState::Reconnecting,
+                                settings.session_mode.clone(),
+                                Some(session_id),
+                            ),
                         );
                         continue;
                     }
                 }
                 let _ = app.emit("audio-level", 0.0f32);
                 let response_stalled = error.code == "gemini.response_stalled";
-                let _ = app.emit("session-status", SessionStatus::error(error, true));
+                let _ = app.emit(
+                    "session-status",
+                    SessionStatus::error(
+                        error,
+                        true,
+                        settings.session_mode.clone(),
+                        Some(session_id),
+                    ),
+                );
                 if response_stalled {
                     log::warn!("[session] response_stalled; retrying_without_delay");
                 } else {
                     tokio::select! {
                         _ = &mut stop_rx => {
-                            let _ = app.emit("session-status", SessionStatus::new(SessionState::Idle));
+                            let _ = app.emit(
+                                "session-status",
+                                SessionStatus::new(
+                                    SessionState::Idle,
+                                    settings.session_mode.clone(),
+                                    Some(session_id),
+                                ),
+                            );
                             return;
                         }
                         _ = tokio::time::sleep(Duration::from_secs(2)) => {}
@@ -179,7 +251,11 @@ async fn run(
                 }
                 let _ = app.emit(
                     "session-status",
-                    SessionStatus::new(SessionState::Reconnecting),
+                    SessionStatus::new(
+                        SessionState::Reconnecting,
+                        settings.session_mode.clone(),
+                        Some(session_id),
+                    ),
                 );
             }
         }

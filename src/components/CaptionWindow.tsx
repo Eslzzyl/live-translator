@@ -1,6 +1,7 @@
 import {
   useCallback,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -12,9 +13,15 @@ import { isReducedMotion, playLineEntrance } from "../lib/lineEntrance";
 import { closeCurrentCaptionWindow } from "../lib/windows";
 import { formatAppError } from "../lib/errors";
 import { SmoothText } from "./SmoothText";
-import type { AppSettings, TranscriptEntry } from "../types";
+import {
+  isTranscriptionSegment,
+  type AppSettings,
+  type SessionMode,
+  type TranscriptItem,
+  type TranscriptionSegment,
+} from "../types";
 
-function useCaptionFlip(entries: TranscriptEntry[]) {
+function useCaptionFlip(entries: TranscriptItem[]) {
   const elements = useRef(new Map<string, HTMLDivElement>());
   const previousRects = useRef(new Map<string, DOMRect>());
   const animations = useRef(new Map<string, Animation>());
@@ -79,7 +86,7 @@ function useCaptionFlip(entries: TranscriptEntry[]) {
   return register;
 }
 
-function useCaptionLineEntrance(entries: TranscriptEntry[]) {
+function useCaptionLineEntrance(entries: TranscriptItem[], mode: SessionMode) {
   const elements = useRef(new Map<string, HTMLElement>());
   const callbacks = useRef(new Map<string, RefCallback<HTMLElement>>());
   const introduced = useRef(new Set<string>());
@@ -106,8 +113,9 @@ function useCaptionLineEntrance(entries: TranscriptEntry[]) {
   useLayoutEffect(() => {
     const reducedMotion = isReducedMotion();
 
-    for (const entry of entries.slice(-3)) {
-      if (!entry.translation || introduced.current.has(entry.id)) continue;
+    for (const entry of entries.slice(-4)) {
+      const text = isTranscriptionSegment(entry) ? entry.text : entry.translation;
+      if (!text || introduced.current.has(entry.id)) continue;
 
       introduced.current.add(entry.id);
       if (reducedMotion) continue;
@@ -128,7 +136,7 @@ function useCaptionLineEntrance(entries: TranscriptEntry[]) {
         })
         .catch(() => undefined);
     }
-  }, [entries]);
+  }, [entries, mode]);
 
   useLayoutEffect(
     () => () => {
@@ -145,14 +153,26 @@ function useCaptionLineEntrance(entries: TranscriptEntry[]) {
 export function CaptionWindow({
   settings,
   entries,
+  mode,
+  liveTranscription,
 }: {
   settings: AppSettings;
-  entries: TranscriptEntry[];
+  entries: TranscriptItem[];
+  mode: SessionMode;
+  liveTranscription: TranscriptionSegment | null;
 }) {
   const { t } = useTranslation();
   const [windowError, setWindowError] = useState("");
-  const registerCaptionLine = useCaptionFlip(entries);
-  const registerCaptionEntrance = useCaptionLineEntrance(entries);
+  const isTranscription = mode === "transcription";
+  const modeEntries = useMemo(() => {
+    const history = isTranscription
+      ? entries.filter((entry) => isTranscriptionSegment(entry) && entry.is_final)
+      : entries.filter((entry) => !isTranscriptionSegment(entry));
+    return isTranscription && liveTranscription ? [...history, liveTranscription] : history;
+  }, [entries, isTranscription, liveTranscription]);
+  const registerCaptionLine = useCaptionFlip(modeEntries);
+  const registerCaptionEntrance = useCaptionLineEntrance(modeEntries, mode);
+  const visibleEntries = modeEntries.slice(-4);
 
   async function handleClose() {
     setWindowError("");
@@ -192,12 +212,16 @@ export function CaptionWindow({
           {windowError}
         </p>
       )}
-      {entries.length === 0 ? (
-        <p className="caption-empty">{t("caption.waiting")}</p>
+      {visibleEntries.length === 0 ? (
+        <p className="caption-empty">
+          {t(isTranscription ? "caption.transcriptionWaiting" : "caption.waiting")}
+        </p>
       ) : (
-        <div className="caption-feed">
-          {entries.slice(-3).map((entry, index, arr) => {
-            const depth = arr.length - 1 - index;
+        <div className={`caption-feed ${isTranscription ? "transcription-feed" : ""}`}>
+          {visibleEntries.map((entry, index, array) => {
+            const depth = array.length - 1 - index;
+            const transcriptionEntry = isTranscriptionSegment(entry);
+            const text = transcriptionEntry ? entry.text : entry.translation;
             return (
               <div
                 className="caption-line-layout"
@@ -208,23 +232,29 @@ export function CaptionWindow({
                   className={
                     "caption-line " +
                     (entry.is_final ? "final " : "partial ") +
-                    (entry.translation ? "has-translation" : "waiting-translation")
+                    (text ? "has-text" : "waiting-text") +
+                    (transcriptionEntry ? " transcription-caption-line" : "")
                   }
                   data-depth={depth}
                   ref={registerCaptionEntrance(entry.id)}
                 >
-                  <p className="caption-translation">
-                    {entry.translation ? (
-                      <SmoothText text={entry.translation} isFinal={entry.is_final} />
+                  <p
+                    className={transcriptionEntry ? "caption-transcription" : "caption-translation"}
+                  >
+                    {text ? (
+                      <SmoothText text={text} isFinal={entry.is_final} />
                     ) : (
                       <span className="caption-pending-text">{t("caption.pending")}</span>
                     )}
                   </p>
-                  {settings.show_original && entry.source && (
-                    <p className="caption-source">
-                      <SmoothText text={entry.source} isFinal={entry.is_final} />
-                    </p>
-                  )}
+                  {!transcriptionEntry &&
+                    settings.show_original &&
+                    !isTranscriptionSegment(entry) &&
+                    entry.source && (
+                      <p className="caption-source">
+                        <SmoothText text={entry.source} isFinal={entry.is_final} />
+                      </p>
+                    )}
                 </article>
               </div>
             );

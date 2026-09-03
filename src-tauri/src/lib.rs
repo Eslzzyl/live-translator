@@ -34,6 +34,8 @@ pub fn run() {
             commands::save_api_key,
             commands::start_translation,
             commands::stop_translation,
+            commands::get_transcription_tail,
+            commands::clear_transcription,
             windows::open_caption_window,
             windows::close_caption_window
         ])

@@ -25,12 +25,14 @@ export function SelectMenu<T extends string>({
   onChange,
   ariaLabel,
   className = "",
+  disabled = false,
 }: {
   value: T;
   options: readonly SelectOption<T>[];
   onChange: (value: T) => void;
   ariaLabel: string;
   className?: string;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [focusedIndex, setFocusedIndex] = useState(-1);
@@ -142,11 +144,12 @@ export function SelectMenu<T extends string>({
     : { display: "none" };
 
   return (
-    <div className={`select-menu ${open ? "open" : ""} ${className}`}>
+    <div className={`select-menu ${open ? "open" : ""} ${disabled ? "disabled" : ""} ${className}`}>
       <button
         ref={triggerRef}
         type="button"
         className="select-trigger"
+        disabled={disabled}
         aria-label={ariaLabel}
         aria-expanded={open}
         aria-haspopup="listbox"

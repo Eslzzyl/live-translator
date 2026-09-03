@@ -12,19 +12,23 @@ import { SelectMenu } from "./SelectMenu";
 import {
   AUDIO_SOURCE_OPTIONS,
   LANGUAGE_OPTIONS,
+  RECOGNITION_LANGUAGE_OPTIONS,
   type AppSettings,
   type AudioSource,
+  type SessionMode,
   type SessionStatus,
 } from "../types";
 
 export function ControlBar({
   settings,
   session,
+  mode,
   onChange,
   onToggleSession,
 }: {
   settings: AppSettings;
   session: SessionStatus;
+  mode: SessionMode;
   onChange: (patch: Partial<AppSettings>) => void;
   onToggleSession: () => void;
 }) {
@@ -32,6 +36,9 @@ export function ControlBar({
   const isRunning = session.active;
   const audioOptions = AUDIO_SOURCE_OPTIONS.map(([value, key]) => [value, t(key)] as const);
   const languageOptions = LANGUAGE_OPTIONS.map(([value, key]) => [value, t(key)] as const);
+  const recognitionLanguageOptions = RECOGNITION_LANGUAGE_OPTIONS.map(
+    ([value, key]) => [value, t(key)] as const,
+  );
 
   const renderSourceIcon = () => {
     switch (settings.audio_source) {
@@ -47,6 +54,28 @@ export function ControlBar({
   return (
     <section className="control-panel">
       <div className="control-items">
+        <div className="control-field mode-field">
+          <span className="control-label">{t("control.mode")}</span>
+          <div className="mode-switch" role="group" aria-label={t("control.mode")}>
+            <button
+              type="button"
+              className={mode === "translation" ? "selected" : ""}
+              disabled={isRunning}
+              onClick={() => onChange({ session_mode: "translation" })}
+            >
+              {t("control.translationMode")}
+            </button>
+            <button
+              type="button"
+              className={mode === "transcription" ? "selected" : ""}
+              disabled={isRunning}
+              onClick={() => onChange({ session_mode: "transcription", playback_enabled: false })}
+            >
+              {t("control.transcriptionMode")}
+            </button>
+          </div>
+        </div>
+
         <div className="control-field">
           <span className="control-label">{t("control.audioSource")}</span>
           <div className="control-input-wrap">
@@ -57,24 +86,42 @@ export function ControlBar({
               options={audioOptions}
               onChange={(value) => onChange({ audio_source: value })}
               ariaLabel={t("control.audioSource")}
+              disabled={isRunning}
             />
           </div>
         </div>
 
-        <div className="control-field language-field">
-          <span className="control-label">{t("control.language")}</span>
-          <div className="control-input-wrap language-flow">
-            <span className="auto-pill">{t("language.auto")}</span>
-            <ArrowRight size={13} className="flow-arrow" aria-hidden="true" />
-            <SelectMenu
-              className="language-select"
-              value={settings.target_language}
-              options={languageOptions}
-              onChange={(value) => onChange({ target_language: value })}
-              ariaLabel={t("control.targetLanguage")}
-            />
+        {mode === "translation" ? (
+          <div className="control-field language-field">
+            <span className="control-label">{t("control.language")}</span>
+            <div className="control-input-wrap language-flow">
+              <span className="auto-pill">{t("language.auto")}</span>
+              <ArrowRight size={13} className="flow-arrow" aria-hidden="true" />
+              <SelectMenu
+                className="language-select"
+                value={settings.target_language}
+                options={languageOptions}
+                onChange={(value) => onChange({ target_language: value })}
+                ariaLabel={t("control.targetLanguage")}
+                disabled={isRunning}
+              />
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="control-field language-field">
+            <span className="control-label">{t("control.recognitionLanguage")}</span>
+            <div className="control-input-wrap">
+              <SelectMenu
+                className="language-select"
+                value={settings.recognition_language}
+                options={recognitionLanguageOptions}
+                onChange={(value) => onChange({ recognition_language: value })}
+                ariaLabel={t("control.recognitionLanguage")}
+                disabled={isRunning}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       <button
@@ -89,7 +136,15 @@ export function ControlBar({
         ) : (
           <Play size={15} fill="currentColor" />
         )}
-        <span>{isRunning ? t("control.stopTranslation") : t("control.startTranslation")}</span>
+        <span>
+          {isRunning
+            ? mode === "transcription"
+              ? t("control.stopTranscription")
+              : t("control.stopTranslation")
+            : mode === "transcription"
+              ? t("control.startTranscription")
+              : t("control.startTranslation")}
+        </span>
       </button>
     </section>
   );

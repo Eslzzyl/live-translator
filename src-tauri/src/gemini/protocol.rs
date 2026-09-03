@@ -9,16 +9,20 @@ use tokio::time::{timeout, Duration};
 use tokio_tungstenite::tungstenite::Message;
 
 use crate::audio::{AudioChunk, AudioHealth, AudioMixer, AudioPlayback};
+use crate::commands::AppState;
 use crate::models::{
-    AppError, AppSettings, AudioSource, SessionState, SessionStatus, TranscriptEntry,
+    AppError, AppSettings, AudioSource, SessionMode, SessionState, SessionStatus, TranscriptEntry,
+    TranscriptionSegment, TranscriptionStyle,
 };
 use crate::network::connect_websocket;
 
 use super::transcript::TranscriptAccumulator;
+use super::transcription::TranscriptionAccumulator;
 
 const ENDPOINT: &str =
     "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent";
 const MODEL: &str = "models/gemini-3.5-live-translate-preview";
+const TRANSCRIPTION_MODEL: &str = "models/gemini-3.5-transcribe-live";
 const AUDIO_PACKET_BYTES: usize = 3_200;
 const SOCKET_SEND_TIMEOUT: Duration = Duration::from_secs(5);
 const AUDIO_STALL_TIMEOUT: Duration = Duration::from_secs(3);
@@ -40,6 +44,8 @@ pub struct RunContext<'a> {
     pub resume_handle: &'a mut Option<String>,
     pub audio_buffer: &'a mut Vec<u8>,
     pub audio_health: &'a AudioHealth,
+    pub session_id: u64,
+    pub state: &'a AppState,
 }
 
 pub struct RunOptions {
@@ -62,6 +68,8 @@ pub async fn run_once(
         resume_handle,
         audio_buffer,
         audio_health,
+        session_id,
+        state,
     } = context;
     let RunOptions {
         session_resumption,
@@ -109,9 +117,17 @@ pub async fn run_once(
     }
     *mixer = AudioMixer::new();
     audio_buffer.clear();
-    emit_status(app, SessionStatus::new(SessionState::Listening));
+    emit_status(
+        app,
+        SessionStatus::new(
+            SessionState::Listening,
+            settings.session_mode.clone(),
+            Some(session_id),
+        ),
+    );
 
     let mut accumulator = TranscriptAccumulator::new();
+    let mut transcription_accumulator = TranscriptionAccumulator::new();
     let mut last_level_emit = Instant::now();
     let mut current_peak: f32 = 0.0;
     let mut last_audio_received = Instant::now();
@@ -219,14 +235,30 @@ pub async fn run_once(
                     }
                     Some(Ok(message)) => {
                         if let Some(text) = message_text(&message)? {
-                            match handle_server_message(
-                                app,
-                                text,
-                                &mut accumulator,
-                                playback,
-                                resume_handle,
-                                &mut last_server_content_at,
-                            )? {
+                            let outcome = if matches!(
+                                &settings.session_mode,
+                                SessionMode::Transcription
+                            ) {
+                                handle_transcription_server_message(
+                                    app,
+                                    text,
+                                    &mut transcription_accumulator,
+                                    session_id,
+                                    state,
+                                    resume_handle,
+                                    &mut last_server_content_at,
+                                )
+                            } else {
+                                handle_server_message(
+                                    app,
+                                    text,
+                                    &mut accumulator,
+                                    playback,
+                                    resume_handle,
+                                    &mut last_server_content_at,
+                                )
+                            }?;
+                            match outcome {
                                 ServerMessageOutcome::Reconnect => {
                                     emit_audio_level(app, 0.0);
                                     return Ok(SessionOutcome::Reconnect);
@@ -289,37 +321,41 @@ pub async fn run_once(
                         return Err(AppError::new("gemini.response_stalled"));
                     }
                 }
-                if let Some(last_update) = last_transcript_update {
-                    let speech_has_stopped = last_speech
-                        .map(|last| last.elapsed() >= LOCAL_SEGMENT_IDLE)
-                        .unwrap_or(true);
-                    if accumulator.has_translation()
-                        && speech_has_stopped
-                        && last_update.elapsed() >= LOCAL_SEGMENT_IDLE
-                    {
-                        accumulator.finalize_source_interim();
-                        if accumulator.has_text() {
-                            emit_transcript(app, accumulator.entry(true));
-                            accumulator.reset();
+                if !matches!(&settings.session_mode, SessionMode::Transcription) {
+                    if let Some(last_update) = last_transcript_update {
+                        let speech_has_stopped = last_speech
+                            .map(|last| last.elapsed() >= LOCAL_SEGMENT_IDLE)
+                            .unwrap_or(true);
+                        if accumulator.has_translation()
+                            && speech_has_stopped
+                            && last_update.elapsed() >= LOCAL_SEGMENT_IDLE
+                        {
+                            accumulator.finalize_source_interim();
+                            if accumulator.has_text() {
+                                emit_transcript(app, accumulator.entry(true));
+                                accumulator.reset();
+                            }
+                            last_transcript_update = None;
+                            segment_started_at = None;
                         }
-                        last_transcript_update = None;
-                        segment_started_at = None;
                     }
                 }
-                if let Some(segment_duration) = segment_started_at
+                if !matches!(&settings.session_mode, SessionMode::Transcription) {
+                    if let Some(segment_duration) = segment_started_at
                     .map(|started| started.elapsed())
                     .filter(|duration| *duration >= MAX_SEGMENT_DURATION)
-                {
-                    if accumulator.has_text() {
-                        log::info!(
-                            "[gemini] local_segment_timeout duration={:?}",
-                            segment_duration,
-                        );
-                        accumulator.finalize_source_interim();
-                        emit_transcript(app, accumulator.entry(true));
-                        accumulator.reset();
-                        last_transcript_update = None;
-                        segment_started_at = None;
+                    {
+                        if accumulator.has_text() {
+                            log::info!(
+                                "[gemini] local_segment_timeout duration={:?}",
+                                segment_duration,
+                            );
+                            accumulator.finalize_source_interim();
+                            emit_transcript(app, accumulator.entry(true));
+                            accumulator.reset();
+                            last_transcript_update = None;
+                            segment_started_at = None;
+                        }
                     }
                 }
                 if last_keepalive.elapsed() >= KEEPALIVE_INTERVAL {
@@ -340,20 +376,38 @@ fn setup_message(
     session_resumption: bool,
     context_window_compression: bool,
 ) -> Value {
-    let mut setup = json!({
-        "setup": {
-            "model": MODEL,
-            "generationConfig": {
-                "responseModalities": ["AUDIO"],
-                "translationConfig": {
-                    "targetLanguageCode": target_language_code(&settings.target_language),
-                    "echoTargetLanguage": false
+    let mut setup = match &settings.session_mode {
+        SessionMode::Translation => json!({
+            "setup": {
+                "model": MODEL,
+                "generationConfig": {
+                    "responseModalities": ["AUDIO"],
+                    "translationConfig": {
+                        "targetLanguageCode": target_language_code(&settings.target_language),
+                        "echoTargetLanguage": false
+                    }
+                },
+                "inputAudioTranscription": {},
+                "outputAudioTranscription": {}
+            }
+        }),
+        SessionMode::Transcription => json!({
+            "setup": {
+                "model": TRANSCRIPTION_MODEL,
+                "generationConfig": {
+                    "responseModalities": ["TEXT"]
+                },
+                "inputAudioTranscription": {
+                    "languageCodes": if settings.recognition_language == "auto" {
+                        json!([])
+                    } else {
+                        json!([settings.recognition_language])
+                    },
+                    "mode": transcription_style(&settings.transcription_style)
                 }
-            },
-            "inputAudioTranscription": {},
-            "outputAudioTranscription": {}
-        }
-    });
+            }
+        }),
+    };
     if session_resumption {
         setup["setup"]["sessionResumption"] = match resume_handle {
             Some(handle) => json!({ "handle": handle }),
@@ -366,6 +420,13 @@ fn setup_message(
         });
     }
     setup
+}
+
+fn transcription_style(style: &TranscriptionStyle) -> &str {
+    match style {
+        TranscriptionStyle::Verbatim => "VERBATIM",
+        TranscriptionStyle::Smart => "SMART",
+    }
 }
 
 fn target_language_code(code: &str) -> &str {
@@ -574,6 +635,101 @@ fn handle_server_message(
     })
 }
 
+fn handle_transcription_server_message(
+    app: &AppHandle,
+    text: &str,
+    accumulator: &mut TranscriptionAccumulator,
+    session_id: u64,
+    state: &AppState,
+    resume_handle: &mut Option<String>,
+    last_server_content_at: &mut Option<Instant>,
+) -> Result<ServerMessageOutcome, AppError> {
+    let value: Value = serde_json::from_str(text)
+        .map_err(|error| AppError::with_detail("gemini.invalid_data", error.to_string()))?;
+    if let Some(error) = value.get("error") {
+        return Err(AppError::with_detail(
+            "gemini.server_error",
+            error.to_string(),
+        ));
+    }
+
+    if let Some(update) = value.get("sessionResumptionUpdate") {
+        if update
+            .get("resumable")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+        {
+            if let Some(handle) = update.get("newHandle").and_then(Value::as_str) {
+                if !handle.is_empty() {
+                    *resume_handle = Some(handle.to_string());
+                }
+            }
+        }
+    }
+    if value.get("goAway").is_some() {
+        log::warn!("[gemini] transcription_go_away received; reconnecting");
+        return Ok(ServerMessageOutcome::Reconnect);
+    }
+
+    let Some(content) = value.get("serverContent") else {
+        return Ok(ServerMessageOutcome::Continue {
+            transcript_changed: false,
+            segment_complete: false,
+        });
+    };
+    *last_server_content_at = Some(Instant::now());
+
+    let mut transcript_changed = false;
+    if let Some(transcription) = content.get("interimInputTranscription") {
+        let text = transcription_text(transcription);
+        if !text.is_empty() {
+            accumulator.update_interim(text);
+            emit_transcription_segment(app, state, accumulator.segment(session_id, false));
+            transcript_changed = true;
+        }
+    }
+
+    let mut segment_complete = false;
+    if let Some(transcription) = content.get("inputTranscription") {
+        let text = transcription_text(transcription);
+        if !text.is_empty() {
+            if transcription_finished(transcription) {
+                accumulator.commit_final(text);
+                emit_transcription_segment(app, state, accumulator.segment(session_id, true));
+                accumulator.reset();
+                segment_complete = true;
+            } else {
+                accumulator.update_interim(text);
+                emit_transcription_segment(app, state, accumulator.segment(session_id, false));
+            }
+            transcript_changed = true;
+        }
+    }
+
+    let generation_complete = content
+        .get("generationComplete")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let turn_complete = content
+        .get("turnComplete")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let interrupted = content
+        .get("interrupted")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    if (generation_complete || turn_complete || interrupted) && accumulator.has_text() {
+        emit_transcription_segment(app, state, accumulator.segment(session_id, true));
+        accumulator.reset();
+        segment_complete = true;
+    }
+
+    Ok(ServerMessageOutcome::Continue {
+        transcript_changed,
+        segment_complete,
+    })
+}
+
 enum ServerMessageOutcome {
     Continue {
         transcript_changed: bool,
@@ -595,6 +751,18 @@ fn emit_status(app: &AppHandle, status: SessionStatus) {
 
 fn emit_transcript(app: &AppHandle, entry: TranscriptEntry) {
     let _ = app.emit("transcript-update", entry);
+}
+
+fn transcription_finished(value: &Value) -> bool {
+    value
+        .get("finished")
+        .and_then(Value::as_bool)
+        .unwrap_or(true)
+}
+
+fn emit_transcription_segment(app: &AppHandle, state: &AppState, segment: TranscriptionSegment) {
+    state.update_transcription(segment.clone());
+    let _ = app.emit("transcription-update", segment);
 }
 
 fn emit_audio_level(app: &AppHandle, level: f32) {
@@ -674,6 +842,31 @@ mod tests {
         let setup = setup_message(&AppSettings::default(), None, false, false);
         assert!(setup["setup"].get("sessionResumption").is_none());
         assert!(setup["setup"].get("contextWindowCompression").is_none());
+    }
+
+    #[test]
+    fn transcription_setup_uses_text_only_live_transcribe_model() {
+        let settings = AppSettings {
+            session_mode: SessionMode::Transcription,
+            recognition_language: "en-US".into(),
+            ..AppSettings::default()
+        };
+        let setup = setup_message(&settings, None, false, false);
+
+        assert_eq!(setup["setup"]["model"], TRANSCRIPTION_MODEL);
+        assert_eq!(
+            setup["setup"]["generationConfig"]["responseModalities"][0],
+            "TEXT"
+        );
+        assert_eq!(
+            setup["setup"]["inputAudioTranscription"]["languageCodes"][0],
+            "en-US"
+        );
+        assert_eq!(
+            setup["setup"]["inputAudioTranscription"]["mode"],
+            "VERBATIM"
+        );
+        assert!(setup["setup"].get("outputAudioTranscription").is_none());
     }
 
     #[test]

@@ -1,6 +1,6 @@
 import { Moon, Settings, Sun } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import type { SessionStatus, Theme } from "../types";
+import type { SessionMode, SessionStatus, Theme } from "../types";
 import { AppLogo } from "./AppLogo";
 
 const STATUS_KEY = {
@@ -14,16 +14,25 @@ const STATUS_KEY = {
 
 export function BrandHeader({
   session,
+  mode,
   onSettings,
   theme,
   onToggleTheme,
 }: {
   session: SessionStatus;
+  mode: SessionMode;
   onSettings: () => void;
   theme: Theme;
   onToggleTheme: () => void;
 }) {
   const { t } = useTranslation();
+
+  const statusText =
+    session.state === "listening"
+      ? mode === "transcription"
+        ? t("header.status.transcribing")
+        : t(STATUS_KEY[session.state])
+      : t(STATUS_KEY[session.state]);
 
   return (
     <header className="topbar">
@@ -33,12 +42,14 @@ export function BrandHeader({
         </div>
         <div>
           <div className="brand-name">Live Translator</div>
-          <div className="brand-subtitle">{t("header.subtitle")}</div>
+          <div className="brand-subtitle">
+            {mode === "transcription" ? t("header.transcriptionSubtitle") : t("header.subtitle")}
+          </div>
         </div>
       </div>
       <div className={"connection-status " + session.state}>
         <span className="status-dot" />
-        {t(STATUS_KEY[session.state])}
+        {statusText}
       </div>
       <button
         className="icon-button topbar-button"

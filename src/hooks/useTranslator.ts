@@ -3,34 +3,30 @@ import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import {
   DEFAULT_SETTINGS,
+  DEFAULT_SESSION_STATUS,
   type AppSettings,
   type SessionStatus,
   type TranscriptEntry,
+  type TranscriptItem,
+  type TranscriptionSegment,
 } from "../types";
 import { createAppError, toAppError } from "../lib/errors";
 import { isTauriRuntime } from "../lib/runtime";
-import { mergeTranscriptEntry } from "../lib/transcript";
+import { mergeTranscriptEntry, mergeTranscriptionSegment } from "../lib/transcript";
 
 type WindowRole = "main" | "caption";
 
 export function useTranslator(role: WindowRole) {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
-  const [entries, setEntries] = useState<TranscriptEntry[]>([]);
-  const [session, setSession] = useState<SessionStatus>({ state: "idle", active: false });
+  const [entries, setEntries] = useState<TranscriptItem[]>([]);
+  const [liveTranscription, setLiveTranscription] = useState<TranscriptionSegment | null>(null);
+  const [session, setSession] = useState<SessionStatus>(DEFAULT_SESSION_STATUS);
   const [audioLevel, setAudioLevel] = useState(0);
   const [apiKeyConfigured, setApiKeyConfigured] = useState(false);
-  const [transcriptLoaded, setTranscriptLoaded] = useState(false);
   const settingsLoaded = useRef(false);
+  const activeSessionId = useRef<number | null>(null);
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem("live-transcript-session");
-      if (stored) setEntries(JSON.parse(stored) as TranscriptEntry[]);
-    } catch {
-      // A stale browser preview entry should not stop either window.
-    }
-    setTranscriptLoaded(true);
-
     if (!isTauriRuntime) {
       settingsLoaded.current = true;
       return;
@@ -40,9 +36,14 @@ export function useTranslator(role: WindowRole) {
     let unlisteners: UnlistenFn[] = [];
 
     void (async () => {
+      let loadedSettings = DEFAULT_SETTINGS;
       try {
         const stored = await invoke<AppSettings>("get_settings");
-        if (!disposed && stored) setSettings({ ...DEFAULT_SETTINGS, ...stored });
+        if (stored) loadedSettings = { ...DEFAULT_SETTINGS, ...stored };
+        if (loadedSettings.session_mode === "transcription") {
+          loadedSettings = { ...loadedSettings, playback_enabled: false };
+        }
+        if (!disposed) setSettings(loadedSettings);
         if (role === "main") {
           const configured = await invoke<boolean>("get_api_key_status");
           if (!disposed) setApiKeyConfigured(configured);
@@ -54,17 +55,18 @@ export function useTranslator(role: WindowRole) {
       }
 
       const events: Promise<UnlistenFn>[] = [];
-      if (role === "main") {
-        events.push(
-          listen<SessionStatus>("session-status", (event) => {
-            if (!disposed) {
-              setSession(event.payload);
-              if (event.payload.state !== "listening") {
-                setAudioLevel(0);
-              }
+      events.push(
+        listen<SessionStatus>("session-status", (event) => {
+          if (!disposed) {
+            activeSessionId.current = event.payload.session_id ?? activeSessionId.current;
+            setSession(event.payload);
+            if (event.payload.state !== "listening") {
+              setAudioLevel(0);
             }
-          }),
-        );
+          }
+        }),
+      );
+      if (role === "main") {
         events.push(
           listen<number>("audio-level", (event) => {
             if (!disposed) setAudioLevel(event.payload);
@@ -80,6 +82,26 @@ export function useTranslator(role: WindowRole) {
           }
         }),
       );
+      events.push(
+        listen<TranscriptionSegment>("transcription-update", (event) => {
+          if (disposed) return;
+          if (
+            activeSessionId.current !== null &&
+            event.payload.session_id !== activeSessionId.current
+          ) {
+            return;
+          }
+          activeSessionId.current ??= event.payload.session_id;
+          if (event.payload.is_final) {
+            setEntries((current) =>
+              mergeTranscriptionSegment(current, event.payload, role === "caption" ? 4 : null),
+            );
+            setLiveTranscription((current) => (current?.id === event.payload.id ? null : current));
+          } else {
+            setLiveTranscription(event.payload);
+          }
+        }),
+      );
       if (role === "caption") {
         events.push(
           listen<AppSettings>("settings-update", (event) => {
@@ -88,11 +110,23 @@ export function useTranslator(role: WindowRole) {
         );
         events.push(
           listen("transcript-clear", () => {
-            if (!disposed) setEntries([]);
+            if (!disposed) {
+              setEntries([]);
+              setLiveTranscription(null);
+            }
           }),
         );
       }
       unlisteners = await Promise.all(events);
+
+      if (role === "caption" && loadedSettings.session_mode === "transcription") {
+        const tail = await invoke<TranscriptionSegment[]>("get_transcription_tail").catch(() => []);
+        if (!disposed && tail.length > 0) {
+          activeSessionId.current = tail[0].session_id;
+          setEntries(tail.filter((entry) => entry.is_final));
+          setLiveTranscription(tail.find((entry) => !entry.is_final) ?? null);
+        }
+      }
     })();
 
     return () => {
@@ -100,15 +134,6 @@ export function useTranslator(role: WindowRole) {
       unlisteners.forEach((unlisten) => unlisten());
     };
   }, [role]);
-
-  useEffect(() => {
-    if (!transcriptLoaded) return;
-    try {
-      localStorage.setItem("live-transcript-session", JSON.stringify(entries));
-    } catch {
-      // The transcript remains available in React state if storage is blocked.
-    }
-  }, [entries, transcriptLoaded]);
 
   useEffect(() => {
     if (role !== "main" || !isTauriRuntime || !settingsLoaded.current) return;
@@ -125,6 +150,7 @@ export function useTranslator(role: WindowRole) {
       setSession((current) => ({
         state: current.state === "listening" ? "idle" : "listening",
         active: current.state !== "listening",
+        mode: settings.session_mode,
       }));
       return;
     }
@@ -135,14 +161,24 @@ export function useTranslator(role: WindowRole) {
     }
 
     setEntries([]);
+    setLiveTranscription(null);
+    activeSessionId.current = null;
+    void invoke("clear_transcription").catch(() => undefined);
     if (isTauriRuntime) void emit("transcript-clear").catch(() => undefined);
     await invoke("start_translation", { settings }).catch((error) => {
-      setSession({ state: "error", active: false, error: toAppError(error) });
+      setSession({
+        state: "error",
+        active: false,
+        mode: settings.session_mode,
+        error: toAppError(error),
+      });
     });
   }, [session.active, settings]);
 
   const clearEntries = useCallback(() => {
     setEntries([]);
+    setLiveTranscription(null);
+    if (isTauriRuntime) void invoke("clear_transcription").catch(() => undefined);
     if (isTauriRuntime) void emit("transcript-clear").catch(() => undefined);
   }, []);
 
@@ -158,6 +194,7 @@ export function useTranslator(role: WindowRole) {
     settings,
     session,
     entries,
+    liveTranscription,
     audioLevel,
     apiKeyConfigured,
     updateSettings,

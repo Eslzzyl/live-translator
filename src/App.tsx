@@ -18,6 +18,9 @@ function App() {
   const captionWindow = isCaptionWindow();
   const { i18n, t } = useTranslation();
   const translator = useTranslator(captionWindow ? "caption" : "main");
+  const mode = translator.session.active
+    ? translator.session.mode
+    : translator.settings.session_mode;
   const { theme, toggleTheme } = useTheme(
     translator.settings.theme_mode,
     translator.settings.color_theme,
@@ -36,7 +39,14 @@ function App() {
   }, [i18n, t, translator.settings.ui_language]);
 
   if (captionWindow) {
-    return <CaptionWindow settings={translator.settings} entries={translator.entries} />;
+    return (
+      <CaptionWindow
+        mode={mode}
+        settings={translator.settings}
+        entries={translator.entries}
+        liveTranscription={translator.liveTranscription}
+      />
+    );
   }
 
   async function handleOpenCaption() {
@@ -53,6 +63,7 @@ function App() {
     <main className="app-shell">
       <BrandHeader
         session={translator.session}
+        mode={mode}
         theme={theme}
         onToggleTheme={toggleTheme}
         onSettings={() => setSettingsOpen(true)}
@@ -60,6 +71,7 @@ function App() {
       <ControlBar
         settings={translator.settings}
         session={translator.session}
+        mode={mode}
         onChange={translator.updateSettings}
         onToggleSession={() => void translator.toggleSession()}
       />
@@ -77,6 +89,8 @@ function App() {
       )}
       <TranscriptPanel
         entries={translator.entries}
+        liveTranscription={translator.liveTranscription}
+        mode={mode}
         session={translator.session}
         audioLevel={translator.audioLevel}
         audioSource={translator.settings.audio_source}
@@ -86,8 +100,8 @@ function App() {
         }
         onOpenCaption={() => void handleOpenCaption()}
         onClear={translator.clearEntries}
-        onCopy={(entries) => void copyTranscript(entries)}
-        onExport={(entries) => void exportTranscript(entries)}
+        onCopy={(entries) => void copyTranscript(entries, mode)}
+        onExport={(entries) => void exportTranscript(entries, mode)}
       />
       {settingsOpen && (
         <SettingsDialog
@@ -96,6 +110,7 @@ function App() {
           onClose={() => setSettingsOpen(false)}
           apiKeyConfigured={translator.apiKeyConfigured}
           onSaveApiKey={translator.saveApiKey}
+          sessionActive={translator.session.active}
         />
       )}
       {overlayOpen && !isTauriRuntime && (
@@ -103,8 +118,20 @@ function App() {
           <button onClick={() => setOverlayOpen(false)} aria-label={t("settings.closeCaption")}>
             ×
           </button>
-          <strong>{t("app.captionPreviewTitle")}</strong>
-          <span>{t("app.captionPreviewDescription")}</span>
+          <strong>
+            {t(
+              mode === "transcription"
+                ? "app.transcriptionPreviewTitle"
+                : "app.captionPreviewTitle",
+            )}
+          </strong>
+          <span>
+            {t(
+              mode === "transcription"
+                ? "app.transcriptionPreviewDescription"
+                : "app.captionPreviewDescription",
+            )}
+          </span>
         </div>
       )}
     </main>

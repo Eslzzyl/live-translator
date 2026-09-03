@@ -157,6 +157,17 @@
   letter-spacing: -0.01em;
 }
 
+.caption-transcription {
+  font-size: var(--caption-font-size);
+  font-weight: 550;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
+.transcription-caption-line.partial .caption-transcription {
+  color: rgba(255, 255, 255, 0.82);
+}
+
 .caption-source {
   margin-top: 4px !important;
   color: rgba(255, 255, 255, 0.8);
@@ -196,6 +207,10 @@
 }
 
 :root[data-theme="light"] .caption-source {
+  color: var(--muted-strong);
+}
+
+:root[data-theme="light"] .transcription-caption-line.partial .caption-transcription {
   color: var(--muted-strong);
 }
 
